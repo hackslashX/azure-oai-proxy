@@ -3,20 +3,49 @@ package main
 import (
     "encoding/json"
     "fmt"
-    "io"
     "github.com/gin-gonic/gin"
     "github.com/gyarbij/azure-oai-proxy/pkg/azure"
     "github.com/gyarbij/azure-oai-proxy/pkg/openai"
+    "io"
     "log"
     "net/http"
     "os"
-    "time"
 )
 
 var (
     Address   = "0.0.0.0:11437"
     ProxyMode = "azure"
 )
+
+// Define the ModelList and Model types based on the API documentation
+type ModelList struct {
+    Object string  `json:"object"`
+    Data   []Model `json:"data"`
+}
+
+type Model struct {
+    ID              string       `json:"id"`
+    Object          string       `json:"object"`
+    CreatedAt       int64        `json:"created_at"`
+    Capabilities    Capabilities `json:"capabilities"`
+    LifecycleStatus string       `json:"lifecycle_status"`
+    Status          string       `json:"status"`
+    Deprecation     Deprecation  `json:"deprecation"`
+    FineTune        string       `json:"fine_tune,omitempty"`
+}
+
+type Capabilities struct {
+    FineTune       bool `json:"fine_tune"`
+    Inference      bool `json:"inference"`
+    Completion     bool `json:"completion"`
+    ChatCompletion bool `json:"chat_completion"`
+    Embeddings     bool `json:"embeddings"`
+}
+
+type Deprecation struct {
+    FineTune  int64 `json:"fine_tune,omitempty"`
+    Inference int64 `json:"inference"`
+}
 
 func init() {
     gin.SetMode(gin.ReleaseMode)
@@ -102,7 +131,7 @@ func fetchDeployedModels() ([]Model, error) {
     defer resp.Body.Close()
 
     if resp.StatusCode != http.StatusOK {
-        body, _ := ioutil.ReadAll(resp.Body)
+        body, _ := io.ReadAll(resp.Body)
         return nil, fmt.Errorf("failed to fetch deployed models: %s", string(body))
     }
 
@@ -111,21 +140,7 @@ func fetchDeployedModels() ([]Model, error) {
         return nil, err
     }
 
-    models := []Model{}
-    for _, deployedModel := range deployedModelsResponse.Data {
-        models = append(models, Model{
-            ID:              deployedModel.ID,
-            Object:          deployedModel.Object,
-            CreatedAt:       deployedModel.CreatedAt,
-            Capabilities:    deployedModel.Capabilities,
-            LifecycleStatus: deployedModel.LifecycleStatus,
-            Status:          deployedModel.Status,
-            Deprecation:     deployedModel.Deprecation,
-            FineTune:        deployedModel.FineTune,
-        })
-    }
-
-    return models, nil
+    return deployedModelsResponse.Data, nil
 }
 
 func handleOptions(c *gin.Context) {
