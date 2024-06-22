@@ -6,7 +6,7 @@ COPY . .
 RUN go build
 
 # Final step
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     ca-certificates && \
     rm -rf /var/lib/apt/lists/* \
