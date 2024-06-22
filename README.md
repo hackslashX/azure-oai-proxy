@@ -20,20 +20,33 @@ Highlights:
 - 👍 Support mocking of OpenAI APIs that are not supported by Azure.
 
 
+
 ## Supported APIs
 
-The latest version of the Azure OpenAI service currently supports the following 3 APIs:
+The latest version of the Azure OpenAI service now supports the following APIs:
 
 | Path                  | Status |
 | --------------------- | ------ |
 | /v1/chat/completions  |  ✅   |
 | /v1/completions       | ✅    |
 | /v1/embeddings        | ✅    |
+| /v1/images/generations | ✅   |
+| /v1/fine_tunes        | ✅    |
+| /v1/files             | ✅    |
+| /v1/models            | ✅    |
+| /deployments          | ✅    |
+| /v1/audio             | ✅    |
 
 > Other APIs not supported by Azure will be returned in a mock format (such as OPTIONS requests initiated by browsers). If you find your project need additional OpenAI-supported APIs, feel free to submit a PR.
 
 ## Recently Updated
 
++ 2024-06-22 Added support for image generation `/v1/images/generations`, fine-tuning operations `/v1/fine_tunes`, and file management `/v1/files`.
++ 2024-06-22 Implemented better error handling and logging for API requests.
++ 2024-06-22 Added support for Azure AD authentication.
++ 2024-06-22 Improved handling of rate limiting and streaming responses.
++ 2024-06-220 Updated model mappings to include the latest models (gpt-4-turbo, gpt-4-vision-preview, dall-e-3).
++ 2024-06-22 Added support for deployments management (/deployments).
 + 2023-04-06 supported `/v1/models` interface, fixed the issue of some web projects depending on `models` interface error.
 + 2023-04-04 supported `options` interface, fixed the cross-domain check error issue of some web projects.
 
@@ -48,7 +61,7 @@ Environment Variables
 | AZURE_OPENAI_PROXY_ADDRESS | Service listening address                                                                                                                                                                                                                                                                                      | 0.0.0.0:11437                                                            |
 | AZURE_OPENAI_PROXY_MODE    | Proxy mode, can be either "azure" or "openai".                                                                                                                                                                                                                                                                 | azure                                                                   |
 | AZURE_OPENAI_ENDPOINT      | Azure OpenAI Endpoint, usually looks like https://{custom}.openai.azure.com. Required.                                                                                                                                                                                                                         |                                                                         |
-| AZURE_OPENAI_APIVERSION    | Azure OpenAI API version. Default is 2023-03-15-preview.                                                                                                                                                                                                                                                       | 2023-03-15-preview                                                      |
+| AZURE_OPENAI_APIVERSION    | Azure OpenAI API version. Default is 2024-05-01-preview.                                                                                                                                                                                                                                                       | 2024-05-01-preview                                                      |
 | AZURE_OPENAI_MODEL_MAPPER  | A comma-separated list of model=deployment pairs. Maps model names to deployment names. For example, `gpt-3.5-turbo=gpt-35-turbo`, `gpt-3.5-turbo-0301=gpt-35-turbo-0301`. If there is no match, the proxy will pass model as deployment name directly (in fact, most Azure model names are same with OpenAI). | `gpt-3.5-turbo=gpt-35-turbo`<br/>`gpt-3.5-turbo-0301=gpt-35-turbo-0301` |
 | AZURE_OPENAI_TOKEN         | Azure OpenAI API Token. If this environment variable is set, the token in the request header will be ignored.                                                                                                                                                                                                  | ""                                                                      |
 
