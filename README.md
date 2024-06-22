@@ -1,15 +1,13 @@
 # Azure OpenAI Proxy
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/Gyarbij/azure-oai-proxy)](https://goreportcard.com/report/github.com/Gyarbij/azure-oai-proxy)
-[![License](https://badgen.net/badge/license/MIT/cyan)](https://github.com/diemus/azure-openai-proxy/blob/main/LICENSE)
-[![Release](https://badgen.net/github/release/diemus/azure-openai-proxy/latest)](https://github.com/diemus/azure-openai-proxy)
-[![Azure](https://badgen.net/badge/icon/Azure?icon=azure&label)](https://github.com/diemus/azure-openai-proxy)
-[![Azure](https://badgen.net/badge/icon/OpenAI?icon=azure&label)](https://github.com/diemus/azure-openai-proxy)
-[![Azure](https://badgen.net/badge/icon/docker?icon=docker&label)](https://github.com/diemus/azure-openai-proxy)
+[![License](https://badgen.net/badge/license/MIT/cyan)](https://github.com/gyarbij/azure-oai-proxy/blob/main/LICENSE)
+[![Release](https://badgen.net/github/release/gyarbij/azure-oai-proxy/latest)](https://github.com/gyarbij/azure-oai-proxy)
+[![Azure](https://badgen.net/badge/icon/Azure?icon=azure&label)](https://github.com/gyarbij/azure-oai-proxy)
+[![Azure](https://badgen.net/badge/icon/OpenAI?icon=azure&label)](https://github.com/gyarbij/azure-oai-proxy)
+[![Azure](https://badgen.net/badge/icon/docker?icon=docker&label)](https://github.com/gyarbij/azure-oai-proxy)
 
 ## Introduction
-
-<a href="./README.md">English</a>
 
 Azure OpenAI Proxy is a proxy for Azure OpenAI API that can convert an OpenAI request to an Azure OpenAI request. It is designed to use as a backend for various open source ChatGPT web project. It also supports being used as a simple OpenAI API proxy to solve the problem of OpenAI API being restricted in some regions.
 
@@ -95,11 +93,11 @@ export HTTPS_PROXY=https://{your-domain}.com
 Deploying through Docker
 
 ```shell
-docker pull ishadows/azure-openai-proxy:latest
-docker run -d -p 11437:11437 --name=azure-openai-proxy \
+docker pull gyarbij/azure-oai-proxy:latest
+docker run -d -p 11437:11437 --name=azure-oai-proxy \
   --env AZURE_OPENAI_ENDPOINT={your azure endpoint} \
   --env AZURE_OPENAI_MODEL_MAPPER={your custom model mapper ,like: gpt-3.5-turbo=gpt-35-turbo,gpt-3.5-turbo-0301=gpt-35-turbo-0301} \
-  ishadows/azure-openai-proxy:latest
+  gyarbij/azure-oai-proxy:latest
 ```
 
 Calling
@@ -132,7 +130,3 @@ For custom fine-tuned models, the model name can be passed directly. For models 
 ## License
 
 MIT
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=diemus/azure-openai-proxy&type=Date)](https://star-history.com/#diemus/azure-openai-proxy&Date)
