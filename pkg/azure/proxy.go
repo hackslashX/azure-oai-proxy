@@ -18,7 +18,7 @@ import (
 
 var (
 	AzureOpenAIToken       = ""
-	AzureOpenAIAPIVersion  = "2023-03-15-preview"
+	AzureOpenAIAPIVersion  = "2024-05-01-preview"
 	AzureOpenAIEndpoint    = ""
 	AzureOpenAIModelMapper = map[string]string{
 		"gpt-3.5-turbo":      "gpt-35-turbo",
