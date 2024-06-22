@@ -149,6 +149,17 @@ func handleToken(req *http.Request) {
     req.Header.Del("Authorization")
 }
 
+func HandleToken(req *http.Request) {
+    token := ""
+    if AzureOpenAIToken != "" {
+        token = AzureOpenAIToken
+    } else {
+        token = strings.ReplaceAll(req.Header.Get("Authorization"), "Bearer ", "")
+    }
+    req.Header.Set("api-key", token)
+    req.Header.Del("Authorization")
+}
+
 func GetAPIKey() string {
     if AzureOpenAIToken != "" {
         return AzureOpenAIToken

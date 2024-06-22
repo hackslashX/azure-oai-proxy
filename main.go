@@ -99,7 +99,10 @@ func main() {
 }
 
 func handleGetModels(c *gin.Context) {
-    models, err := fetchDeployedModels()
+    req, _ := http.NewRequest("GET", c.Request.URL.String(), nil)
+    req.Header.Set("Authorization", c.GetHeader("Authorization"))
+
+    models, err := fetchDeployedModels(req)
     if err != nil {
         log.Printf("error fetching deployed models: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch deployed models"})
@@ -112,7 +115,7 @@ func handleGetModels(c *gin.Context) {
     c.JSON(http.StatusOK, result)
 }
 
-func fetchDeployedModels() ([]Model, error) {
+func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
     endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")
     if endpoint == "" {
         endpoint = azure.AzureOpenAIEndpoint
@@ -124,8 +127,7 @@ func fetchDeployedModels() ([]Model, error) {
         return nil, err
     }
 
-    apiKey := azure.GetAPIKey()
-    req.Header.Set("api-key", apiKey)
+    azure.HandleToken(req)
 
     client := &http.Client{}
     resp, err := client.Do(req)
