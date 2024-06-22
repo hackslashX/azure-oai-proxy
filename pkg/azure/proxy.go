@@ -24,13 +24,16 @@ var (
     AzureOpenAIModelMapper = map[string]string{
         "gpt-3.5-turbo":      "gpt-35-turbo",
         "gpt-3.5-turbo-0125": "gpt-35-turbo-0125",
-        "gpt-4o":              "gpt-4o",
+        "gpt-4o":             "gpt-4o",
         "gpt-4":              "gpt-4",
         "gpt-4-32k":          "gpt-4-32k",
         "gpt-4-vision-preview": "gpt-4-vision",
         "gpt-4-turbo":        "gpt-4-turbo",
         "text-embedding-ada-002": "text-embedding-ada-002",
         "dall-e-3":           "dall-e-3",
+		"whisper-1":          "whisper",
+		"tts-1":           	  "tts",
+		"tts-1-hd":           "tts-hd",
     }
     fallbackModelMapper = regexp.MustCompile(`[.:]`)
 )
