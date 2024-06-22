@@ -149,6 +149,10 @@ func handleToken(req *http.Request) {
     req.Header.Del("Authorization")
 }
 
+func SetAPIKey(req *http.Request) {
+    handleToken(req)
+}
+
 func modifyResponse(res *http.Response) error {
     // Handle rate limiting headers
     if res.StatusCode == http.StatusTooManyRequests {
