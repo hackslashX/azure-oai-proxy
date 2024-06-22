@@ -38,6 +38,7 @@ func main() {
         // New DALL-E routes
         router.POST("/v1/images/generations", handleAzureProxy)
 		// Whisper speech-to-text
+		router.POST("/v1/audio/speech", handleAzureProxy)
 		router.POST("/v1/audio/transcriptions", handleAzureProxy)
 		router.POST("/v1/audio/translations", handleAzureProxy)
         // Fine-tuning routes
