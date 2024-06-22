@@ -12,7 +12,7 @@ RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -
     ca-certificates && \
     rm -rf /var/lib/apt/lists/* \
 
-EXPOSE 8080
+EXPOSE 11437
 WORKDIR /app
-COPY --from=builder /build/azure-openai-proxy /app/azure-openai-proxy
-ENTRYPOINT ["/app/azure-openai-proxy"]
+COPY --from=builder /build/azure-oai-proxy /app/azure-oai-proxy
+ENTRYPOINT ["/app/azure-oai-proxy"]

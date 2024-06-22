@@ -1,4 +1,4 @@
-module github.com/diemus/azure-openai-proxy
+module github.com/gyarbij/azure-oai-proxy
 
 go 1.18
 
