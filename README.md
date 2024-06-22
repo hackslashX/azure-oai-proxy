@@ -1,6 +1,6 @@
 # Azure OpenAI Proxy
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/diemus/azure-openai-proxy)](https://goreportcard.com/report/github.com/diemus/azure-openai-proxy)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Gyarbij/azure-oai-proxy)](https://goreportcard.com/report/github.com/Gyarbij/azure-oai-proxy)
 [![License](https://badgen.net/badge/license/MIT/cyan)](https://github.com/diemus/azure-openai-proxy/blob/main/LICENSE)
 [![Release](https://badgen.net/github/release/diemus/azure-openai-proxy/latest)](https://github.com/diemus/azure-openai-proxy)
 [![Azure](https://badgen.net/badge/icon/Azure?icon=azure&label)](https://github.com/diemus/azure-openai-proxy)
@@ -9,8 +9,7 @@
 
 ## Introduction
 
-<a href="./README.md">English</a> |
-<a href="./README.zh-cn.md">中文</a>
+<a href="./README.md">English</a>
 
 Azure OpenAI Proxy is a proxy for Azure OpenAI API that can convert an OpenAI request to an Azure OpenAI request. It is designed to use as a backend for various open source ChatGPT web project. It also supports being used as a simple OpenAI API proxy to solve the problem of OpenAI API being restricted in some regions.
 
