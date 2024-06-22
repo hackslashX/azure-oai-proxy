@@ -76,17 +76,17 @@ func handleGetModels(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch deployed models"})
         return
     }
-    result := azure.ListModelResponse{
+    result := ModelList{
         Object: "list",
         Data:   models,
     }
     c.JSON(http.StatusOK, result)
 }
 
-func fetchDeployedModels() ([]azure.Model, error) {
+func fetchDeployedModels() ([]Model, error) {
     endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")
     apiKey := os.Getenv("AZURE_OPENAI_API_KEY")
-    
+
     url := fmt.Sprintf("%s/openai/models?api-version=2024-05-01-preview", endpoint)
     req, err := http.NewRequest("GET", url, nil)
     if err != nil {
@@ -102,40 +102,26 @@ func fetchDeployedModels() ([]azure.Model, error) {
     defer resp.Body.Close()
 
     if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
+        body, _ := ioutil.ReadAll(resp.Body)
         return nil, fmt.Errorf("failed to fetch deployed models: %s", string(body))
     }
 
-    var deployedModelsResponse azure.ModelList
+    var deployedModelsResponse ModelList
     if err := json.NewDecoder(resp.Body).Decode(&deployedModelsResponse); err != nil {
         return nil, err
     }
 
-    models := []azure.Model{}
+    models := []Model{}
     for _, deployedModel := range deployedModelsResponse.Data {
-        models = append(models, azure.Model{
-            ID:      deployedModel.ID,
-            Object:  "model",
-            Created: deployedModel.CreatedAt,
-            OwnedBy: "openai",
-            Permission: []azure.ModelPermission{
-                {
-                    ID:                 "",
-                    Object:             "model",
-                    Created:            deployedModel.CreatedAt,
-                    AllowCreateEngine:  true,
-                    AllowSampling:      true,
-                    AllowLogprobs:      true,
-                    AllowSearchIndices: true,
-                    AllowView:          true,
-                    AllowFineTuning:    true,
-                    Organization:       "*",
-                    Group:              nil,
-                    IsBlocking:         false,
-                },
-            },
-            Root:   deployedModel.ID,
-            Parent: nil,
+        models = append(models, Model{
+            ID:              deployedModel.ID,
+            Object:          deployedModel.Object,
+            CreatedAt:       deployedModel.CreatedAt,
+            Capabilities:    deployedModel.Capabilities,
+            LifecycleStatus: deployedModel.LifecycleStatus,
+            Status:          deployedModel.Status,
+            Deprecation:     deployedModel.Deprecation,
+            FineTune:        deployedModel.FineTune,
         })
     }
 

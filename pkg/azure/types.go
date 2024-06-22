@@ -6,13 +6,24 @@ type ListModelResponse struct {
 }
 
 type Model struct {
-	ID         string            `json:"id"`
-	Object     string            `json:"object"`
+    ID              string       `json:"id"`
+    Object          string       `json:"object"`
+    CreatedAt       int64        `json:"created_at"`
+    Capabilities    Capabilities `json:"capabilities"`
+    LifecycleStatus string       `json:"lifecycle_status"`
+    Status          string       `json:"status"`
+    Deprecation     Deprecation  `json:"deprecation,omitempty"`
+    FineTune        string       `json:"fine_tune,omitempty"`
 	Created    int               `json:"created"`
 	OwnedBy    string            `json:"owned_by"`
 	Permission []ModelPermission `json:"permission"`
 	Root       string            `json:"root"`
 	Parent     any               `json:"parent"`
+}
+
+type ModelList struct {
+    Object string  `json:"object"`
+    Data   []Model `json:"data"`
 }
 
 type ModelPermission struct {
@@ -173,4 +184,17 @@ type AudioTranscriptionRequest struct {
 // AudioTranscriptionResponse represents the response structure from audio transcription
 type AudioTranscriptionResponse struct {
 	Text string `json:"text"`
+}
+
+type Capabilities struct {
+    ChatCompletion bool `json:"chat_completion"`
+    Completion     bool `json:"completion"`
+    Embeddings     bool `json:"embeddings"`
+    FineTune       bool `json:"fine_tune"`
+    Inference      bool `json:"inference"`
+}
+
+type Deprecation struct {
+    FineTune  int `json:"fine_tune,omitempty"`
+    Inference int `json:"inference,omitempty"`
 }
