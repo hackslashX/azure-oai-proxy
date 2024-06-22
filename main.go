@@ -2,11 +2,15 @@ package main
 
 import (
     "encoding/json"
+    "fmt"
+    "io"
     "github.com/gin-gonic/gin"
     "github.com/gyarbij/azure-oai-proxy/pkg/azure"
+    "github.com/gyarbij/azure-oai-proxy/pkg/openai"
     "log"
     "net/http"
     "os"
+    "time"
 )
 
 var (
@@ -31,6 +35,7 @@ func main() {
     if ProxyMode == "azure" {
         router.GET("/v1/models", handleGetModels)
         router.OPTIONS("/v1/*path", handleOptions)
+        // Existing routes
         router.POST("/v1/chat/completions", handleAzureProxy)
         router.POST("/v1/completions", handleAzureProxy)
         router.POST("/v1/embeddings", handleAzureProxy)
@@ -96,7 +101,7 @@ func fetchDeployedModels() ([]azure.Model, error) {
     defer resp.Body.Close()
 
     if resp.StatusCode != http.StatusOK {
-        body, _ := ioutil.ReadAll(resp.Body)
+        body, _ := io.ReadAll(resp.Body)
         return nil, fmt.Errorf("failed to fetch deployed models: %s", string(body))
     }
 
@@ -107,16 +112,23 @@ func fetchDeployedModels() ([]azure.Model, error) {
 
     models := []azure.Model{}
     for _, deployedModel := range deployedModelsResponse.Data {
+        createdTime, err := time.Parse(time.RFC3339, deployedModel.CreatedAt)
+        if err != nil {
+            log.Printf("Error parsing CreatedAt time: %v", err)
+            continue
+        }
+        createdUnix := createdTime.Unix()
+
         models = append(models, azure.Model{
             ID:      deployedModel.ModelID,
             Object:  "model",
-            Created: int(deployedModel.CreatedAt),
+            Created: int(createdUnix),
             OwnedBy: "openai",
             Permission: []azure.ModelPermission{
                 {
                     ID:                 "",
                     Object:             "model",
-                    Created:            int(deployedModel.CreatedAt),
+                    Created:            int(createdUnix),
                     AllowCreateEngine:  true,
                     AllowSampling:      true,
                     AllowLogprobs:      true,
@@ -159,6 +171,7 @@ func handleAzureProxy(c *gin.Context) {
         }
     }
 
+    // Enhanced error logging
     if c.Writer.Status() >= 400 {
         log.Printf("Azure API request failed: %s %s, Status: %d", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
     }
