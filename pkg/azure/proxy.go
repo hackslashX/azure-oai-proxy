@@ -3,7 +3,6 @@ package azure
 import (
     "bytes"
     "fmt"
-    "io"
     "io/ioutil"
     "log"
     "net/http"
