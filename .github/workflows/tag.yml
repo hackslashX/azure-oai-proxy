@@ -13,16 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Get last commit message
-        id: commit_message
-        run: echo "COMMIT_MESSAGE=$(git log -1 --pretty=%B)" >> $GITHUB_ENV
+      - name: Get branch name
+        id: get_branch_name
+        run: echo "BRANCH_NAME=$(git symbolic-ref --short HEAD)" >> $GITHUB_ENV
 
       - name: Extract version from branch name
         id: extract_version
         run: |
-          BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/refs\/heads\///')
-          if [[ $BRANCH_NAME =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "VERSION=$BRANCH_NAME" >> $GITHUB_ENV
+          if [[ "${{ env.BRANCH_NAME }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION=${{ env.BRANCH_NAME }}" >> $GITHUB_ENV
           else
             echo "VERSION=" >> $GITHUB_ENV
           fi
