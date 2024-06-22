@@ -35,10 +35,11 @@ func main() {
         router.POST("/v1/chat/completions", handleAzureProxy)
         router.POST("/v1/completions", handleAzureProxy)
         router.POST("/v1/embeddings", handleAzureProxy)
-        // New DALL-E routes
+        // DALL-E routes
         router.POST("/v1/images/generations", handleAzureProxy)
-		// Whisper speech-to-text
+		// speech- routes
 		router.POST("/v1/audio/speech", handleAzureProxy)
+		router.GET("/v1/audio/voices", handleAzureProxy)
 		router.POST("/v1/audio/transcriptions", handleAzureProxy)
 		router.POST("/v1/audio/translations", handleAzureProxy)
         // Fine-tuning routes
@@ -56,6 +57,7 @@ func main() {
         // Deployments management routes
         router.GET("/deployments", handleAzureProxy)
         router.GET("/deployments/:deployment_id", handleAzureProxy)
+		router.GET("/v1/models/:model_id/capabilities", handleAzureProxy)
     } else {
         router.Any("*path", handleOpenAIProxy)
     }
