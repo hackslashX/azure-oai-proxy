@@ -153,18 +153,16 @@ func HandleToken(req *http.Request) {
     token := ""
     if AzureOpenAIToken != "" {
         token = AzureOpenAIToken
-    } else {
-        token = strings.ReplaceAll(req.Header.Get("Authorization"), "Bearer ", "")
+    } else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+        token = strings.TrimPrefix(authHeader, "Bearer ")
+    } else if apiKey := os.Getenv("AZURE_OPENAI_API_KEY"); apiKey != "" {
+        token = apiKey
     }
-    req.Header.Set("api-key", token)
-    req.Header.Del("Authorization")
-}
 
-func GetAPIKey() string {
-    if AzureOpenAIToken != "" {
-        return AzureOpenAIToken
+    if token != "" {
+        req.Header.Set("api-key", token)
+        req.Header.Del("Authorization")
     }
-    return os.Getenv("AZURE_OPENAI_API_KEY")
 }
 
 func modifyResponse(res *http.Response) error {

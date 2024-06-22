@@ -127,6 +127,8 @@ func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
         return nil, err
     }
 
+    req.Header.Set("Authorization", originalReq.Header.Get("Authorization"))
+
     azure.HandleToken(req)
 
     client := &http.Client{}
