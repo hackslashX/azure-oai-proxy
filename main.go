@@ -17,6 +17,7 @@ var (
     ProxyMode = "azure"
 )
 
+// Define the ModelList and Model types based on the API documentation
 type ModelList struct {
     Object string  `json:"object"`
     Data   []Model `json:"data"`
@@ -123,7 +124,8 @@ func fetchDeployedModels() ([]Model, error) {
         return nil, err
     }
 
-    azure.SetAPIKey(req)
+    apiKey := azure.GetAPIKey()
+    req.Header.Set("api-key", apiKey)
 
     client := &http.Client{}
     resp, err := client.Do(req)
@@ -168,6 +170,7 @@ func handleAzureProxy(c *gin.Context) {
         }
     }
 
+    // Enhanced error logging
     if c.Writer.Status() >= 400 {
         log.Printf("Azure API request failed: %s %s, Status: %d", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
     }

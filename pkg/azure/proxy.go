@@ -149,8 +149,11 @@ func handleToken(req *http.Request) {
     req.Header.Del("Authorization")
 }
 
-func SetAPIKey(req *http.Request) {
-    handleToken(req)
+func GetAPIKey() string {
+    if AzureOpenAIToken != "" {
+        return AzureOpenAIToken
+    }
+    return os.Getenv("AZURE_OPENAI_API_KEY")
 }
 
 func modifyResponse(res *http.Response) error {
