@@ -1,6 +1,5 @@
 # Build step
 FROM golang:1.18 AS builder
-ENV GOPROXY=https://goproxy.cn,direct
 RUN mkdir -p /build
 WORKDIR /build
 COPY . .
