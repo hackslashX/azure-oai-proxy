@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/Gyarbij/azure-oai-proxy/pkg/azure"
-	"github.com/Gyarbij/azure-oai-proxy/pkg/openai"
+	"github.com/gyarbij/azure-oai-proxy/pkg/azure"
+	"github.com/gyarbij/azure-oai-proxy/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
