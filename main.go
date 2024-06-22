@@ -85,13 +85,14 @@ func handleGetModels(c *gin.Context) {
 
 func fetchDeployedModels() ([]azure.Model, error) {
     endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")
-    token := os.Getenv("AZURE_OPENAI_TOKEN")
-
-    req, err := http.NewRequest("GET", endpoint+"/openai/deployments?api-version=2024-05-01-preview", nil)
+    apiKey := os.Getenv("AZURE_OPENAI_API_KEY")
+    
+    url := fmt.Sprintf("%s/openai/models?api-version=2024-05-01-preview", endpoint)
+    req, err := http.NewRequest("GET", url, nil)
     if err != nil {
         return nil, err
     }
-    req.Header.Set("Authorization", "Bearer "+token)
+    req.Header.Set("api-key", apiKey)
 
     client := &http.Client{}
     resp, err := client.Do(req)
@@ -105,30 +106,23 @@ func fetchDeployedModels() ([]azure.Model, error) {
         return nil, fmt.Errorf("failed to fetch deployed models: %s", string(body))
     }
 
-    var deployedModelsResponse azure.ListDeployedModelsResponse
+    var deployedModelsResponse azure.ModelList
     if err := json.NewDecoder(resp.Body).Decode(&deployedModelsResponse); err != nil {
         return nil, err
     }
 
     models := []azure.Model{}
     for _, deployedModel := range deployedModelsResponse.Data {
-        createdTime, err := time.Parse(time.RFC3339, deployedModel.CreatedAt)
-        if err != nil {
-            log.Printf("Error parsing CreatedAt time: %v", err)
-            continue
-        }
-        createdUnix := createdTime.Unix()
-
         models = append(models, azure.Model{
-            ID:      deployedModel.ModelID,
+            ID:      deployedModel.ID,
             Object:  "model",
-            Created: int(createdUnix),
+            Created: deployedModel.CreatedAt,
             OwnedBy: "openai",
             Permission: []azure.ModelPermission{
                 {
                     ID:                 "",
                     Object:             "model",
-                    Created:            int(createdUnix),
+                    Created:            deployedModel.CreatedAt,
                     AllowCreateEngine:  true,
                     AllowSampling:      true,
                     AllowLogprobs:      true,
@@ -140,7 +134,7 @@ func fetchDeployedModels() ([]azure.Model, error) {
                     IsBlocking:         false,
                 },
             },
-            Root:   deployedModel.ModelID,
+            Root:   deployedModel.ID,
             Parent: nil,
         })
     }
