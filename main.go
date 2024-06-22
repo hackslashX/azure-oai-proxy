@@ -17,7 +17,6 @@ var (
     ProxyMode = "azure"
 )
 
-// Define the ModelList and Model types based on the API documentation
 type ModelList struct {
     Object string  `json:"object"`
     Data   []Model `json:"data"`
@@ -114,14 +113,17 @@ func handleGetModels(c *gin.Context) {
 
 func fetchDeployedModels() ([]Model, error) {
     endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")
-    apiKey := os.Getenv("AZURE_OPENAI_API_KEY")
+    if endpoint == "" {
+        endpoint = azure.AzureOpenAIEndpoint
+    }
 
-    url := fmt.Sprintf("%s/openai/models?api-version=2024-05-01-preview", endpoint)
+    url := fmt.Sprintf("%s/openai/models?api-version=%s", endpoint, azure.AzureOpenAIAPIVersion)
     req, err := http.NewRequest("GET", url, nil)
     if err != nil {
         return nil, err
     }
-    req.Header.Set("api-key", apiKey)
+
+    azure.SetAPIKey(req)
 
     client := &http.Client{}
     resp, err := client.Do(req)
@@ -166,7 +168,6 @@ func handleAzureProxy(c *gin.Context) {
         }
     }
 
-    // Enhanced error logging
     if c.Writer.Status() >= 400 {
         log.Printf("Azure API request failed: %s %s, Status: %d", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
     }
