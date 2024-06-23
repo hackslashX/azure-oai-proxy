@@ -79,14 +79,16 @@ docker run -d -p 11437:11437 --name=azure-oai-proxy \
 
 Environment Variables
 
-| Parameters                 | Description                                                                                                                                                                                                                                                                                                    | Default Value                                                           |
-| :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
-| AZURE_OPENAI_PROXY_ADDRESS | Service listening address                                                                                                                                                                                                                                                                                      | 0.0.0.0:11437                                                            |
-| AZURE_OPENAI_PROXY_MODE    | Proxy mode, can be either "azure" or "openai".                                                                                                                                                                                                                                                                 | azure                                                                   |
-| AZURE_OPENAI_ENDPOINT      | Azure OpenAI Endpoint, usually looks like https://{custom}.openai.azure.com. Required.                                                                                                                                                                                                                         |                                                                         |
-| AZURE_OPENAI_APIVERSION    | Azure OpenAI API version. Default is 2024-05-01-preview.                                                                                                                                                                                                                                                       | 2024-05-01-preview                                                      |
-| AZURE_OPENAI_MODEL_MAPPER (DEPRECATED)  | A comma-separated list of model=deployment pairs. Maps model names to deployment names. For example, `gpt-3.5-turbo=gpt-35-turbo`, `gpt-3.5-turbo-0301=gpt-35-turbo-0301`. If there is no match, the proxy will pass model as deployment name directly (in fact, most Azure model names are same with OpenAI). | `gpt-3.5-turbo=gpt-35-turbo`<br/>`gpt-3.5-turbo-0301=gpt-35-turbo-0301` |
-| AZURE_OPENAI_TOKEN         | Azure OpenAI API Token. If this environment variable is set, the token in the request header will be ignored.                                                                                                                                                                                                  | ""                                                                      |
+Here's the updated markdown table including a column for required:
+
+| Parameters                                   | Description                                                                                                                                                                                                                                                                                                    | Default Value                                                           | Required |
+| :------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------- | :------- |
+| AZURE_OPENAI_PROXY_ADDRESS                   | Service listening address                                                                                                                                                                                                                                                                                      | 0.0.0.0:11437                                                            | No       |
+| AZURE_OPENAI_PROXY_MODE                      | Proxy mode, can be either "azure" or "openai".                                                                                                                                                                                                                                                                 | azure                                                                   | No       |
+| AZURE_OPENAI_ENDPOINT                        | Azure OpenAI Endpoint, usually looks like https://{YOURDEPLOYMENT}.openai.azure.com.                                                                                                                                                                                                                         |                                                                         | Yes      |
+| AZURE_OPENAI_APIVERSION                      | Azure OpenAI API version. Default is 2024-05-01-preview.                                                                                                                                                                                                                                                       | 2024-05-01-preview                                                      | No       |
+| AZURE_OPENAI_MODEL_MAPPER (Use for custom deployment names) | A comma-separated list of model=deployment pairs. Maps model names to deployment names. For example, `gpt-3.5-turbo=gpt-35-turbo`, `gpt-3.5-turbo-0301=gpt-35-turbo-0301`. If there is no match, the proxy will pass model as deployment name directly (most Azure model names are the same as OpenAI). | "" | No       |
+| AZURE_OPENAI_TOKEN                           | Azure OpenAI API Token. If this environment variable is set, the token in the request header will be ignored.                                                                                                                                                                                                  | ""                                                                      | No       |
 
 Use in command line
 
@@ -126,12 +128,21 @@ export HTTPS_PROXY=https://{your-domain}.com
 
 ## Deploy
 
-Deploying through Docker
+Docker Normal Deployment
 
 ```shell
 docker pull gyarbij/azure-oai-proxy:latest
 docker run -p 11437:11437 --name=azure-oai-proxy \
   --env AZURE_OPENAI_ENDPOINT=https://{YOURENDPOINT}.openai.azure.com/ \
+  gyarbij/azure-oai-proxy:latest
+```
+Docker with custom deployment names
+
+```shell
+docker pull gyarbij/azure-oai-proxy:latest
+docker run -p 11437:11437 --name=azure-oai-proxy \
+  --env AZURE_OPENAI_ENDPOINT=https://{YOURENDPOINT}.openai.azure.com/ \
+  --env AZURE_OPENAI_MODEL_MAPPER=gpt-3.5-turbo=dev-g35-turbo,gpt-4=gpt-4ooo \
   gyarbij/azure-oai-proxy:latest
 ```
 
@@ -146,6 +157,45 @@ curl https://localhost:11437/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Model Mapping Mechanism (Used for Custom deployment names)
+
+These are the default mappings for the most common models, if your Azure OpenAI deployment uses different names, you can set the `AZURE_OPENAI_MODEL_MAPPER` environment variable to define custom mappings.:
+
+| OpenAI Model                    | Azure OpenAI Model            |
+|---------------------------------|-------------------------------|
+| `"gpt-3.5-turbo"`               | `"gpt-35-turbo"`              |
+| `"gpt-3.5-turbo-0125"`          | `"gpt-35-turbo-0125"`         |
+| `"gpt-3.5-turbo-0613"`          | `"gpt-35-turbo-0613"`         |
+| `"gpt-3.5-turbo-1106"`          | `"gpt-35-turbo-1106"`         |
+| `"gpt-3.5-turbo-16k-0613"`      | `"gpt-35-turbo-16k-0613"`     |
+| `"gpt-3.5-turbo-instruct-0914"` | `"gpt-35-turbo-instruct-0914"`|
+| `"gpt-4"`                       | `"gpt-4-0613"`                |
+| `"gpt-4-32k"`                   | `"gpt-4-32k"`                 |
+| `"gpt-4-32k-0613"`              | `"gpt-4-32k-0613"`            |
+| `"gpt-4o"`                      | `"gpt-4o"`                    |
+| `"gpt-4o-2024-05-13"`           | `"gpt-4o-2024-05-13"`         |
+| `"gpt-4-turbo"`                 | `"gpt-4-turbo"`               |
+| `"gpt-4-vision-preview"`        | `"gpt-4-vision-preview"`      |
+| `"gpt-4-turbo-2024-04-09"`      | `"gpt-4-turbo-2024-04-09"`    |
+| `"gpt-4-1106-preview"`          | `"gpt-4-1106-preview"`        |
+| `"text-embedding-ada-002"`      | `"text-embedding-ada-002"`    |
+| `"dall-e-2"`                    | `"dall-e-2"`                  |
+| `"dall-e-3"`                    | `"dall-e-3"`                  |
+| `"babbage-002"`                 | `"babbage-002"`               |
+| `"davinci-002"`                 | `"davinci-002"`               |
+| `"whisper-1"`                   | `"whisper"`                   |
+| `"tts-1"`                       | `"tts"`                       |
+| `"tts-1-hd"`                    | `"tts-hd"`                    |
+| `"text-embedding-3-small"`      | `"text-embedding-3-small-1"`  |
+| `"text-embedding-3-large"`      | `"text-embedding-3-large-1"`  |
+
+For custom fine-tuned models, the model name can be passed directly. For models with deployment names different from the model names, custom mapping relationships can be defined, such as:
+
+| Model Name         | Deployment Name              |
+| :----------------- | :--------------------------- |
+| gpt-3.5-turbo      | gpt-35-turbo-upgrade         |
+| gpt-3.5-turbo-0301 | gpt-35-turbo-0301-fine-tuned |
 
 ## Recently Updated
 
@@ -162,21 +212,6 @@ curl https://localhost:11437/v1/chat/completions \
 + 2024-06-22 Improved handling of rate limiting and streaming responses.
 + 2024-06-22 Updated model mappings to include the latest models (gpt-4-turbo, gpt-4-vision-preview, dall-e-3).
 + 2024-06-23 Added support for deployments management (/deployments).
-
-## Model Mapping Mechanism (DEPRECATED)
-
-There are a series of rules for model mapping pre-defined in `AZURE_OPENAI_MODEL_MAPPER`, and the default configuration basically satisfies the mapping of all Azure models. The rules include:
-
-- `gpt-3.5-turbo` -> `gpt-35-turbo`
-- `gpt-3.5-turbo-0301` -> `gpt-35-turbo-0301`
-- A mapping mechanism that pass model name directly as fallback.
-
-For custom fine-tuned models, the model name can be passed directly. For models with deployment names different from the model names, custom mapping relationships can be defined, such as:
-
-| Model Name         | Deployment Name              |
-| :----------------- | :--------------------------- |
-| gpt-3.5-turbo      | gpt-35-turbo-upgrade         |
-| gpt-3.5-turbo-0301 | gpt-35-turbo-0301-fine-tuned |
 
 ## Contributing
 
