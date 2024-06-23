@@ -122,78 +122,34 @@ func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
 		endpoint = azure.AzureOpenAIEndpoint
 	}
 
-	// Fetch list of deployments
-	deploymentsURL := fmt.Sprintf("%s/openai/deployments?api-version=%s", endpoint, azure.AzureOpenAIAPIVersion)
-	deploymentsReq, err := http.NewRequest("GET", deploymentsURL, nil)
+	url := fmt.Sprintf("%s/openai/models?api-version=%s", endpoint, azure.AzureOpenAIAPIVersion)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentsReq.Header.Set("Authorization", originalReq.Header.Get("Authorization"))
-	azure.HandleToken(deploymentsReq)
+	req.Header.Set("Authorization", originalReq.Header.Get("Authorization"))
+
+	azure.HandleToken(req)
 
 	client := &http.Client{}
-	deploymentsResp, err := client.Do(deploymentsReq)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer deploymentsResp.Body.Close()
+	defer resp.Body.Close()
 
-	if deploymentsResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(deploymentsResp.Body)
-		return nil, fmt.Errorf("failed to fetch deployments: %s", string(body))
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to fetch deployed models: %s", string(body))
 	}
 
-	var deployments struct {
-		Data []struct {
-			Model string `json:"model"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(deploymentsResp.Body).Decode(&deployments); err != nil {
+	var deployedModelsResponse ModelList
+	if err := json.NewDecoder(resp.Body).Decode(&deployedModelsResponse); err != nil {
 		return nil, err
 	}
 
-	// Create map of deployed models
-	deployedModels := make(map[string]bool)
-	for _, deployment := range deployments.Data {
-		deployedModels[deployment.Model] = true
-	}
-
-	// Fetch models and filter on deployment
-	modelsURL := fmt.Sprintf("%s/openai/models?api-version=%s", endpoint, azure.AzureOpenAIAPIVersion)
-	modelsReq, err := http.NewRequest("GET", modelsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	modelsReq.Header.Set("Authorization", originalReq.Header.Get("Authorization"))
-	azure.HandleToken(modelsReq)
-
-	modelsResp, err := client.Do(modelsReq)
-	if err != nil {
-		return nil, err
-	}
-	defer modelsResp.Body.Close()
-
-	if modelsResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(modelsResp.Body)
-		return nil, fmt.Errorf("failed to fetch models: %s", string(body))
-	}
-
-	var allModels ModelList
-	if err := json.NewDecoder(modelsResp.Body).Decode(&allModels); err != nil {
-		return nil, err
-	}
-
-	// Filter models to only include deployed
-	deployedModelList := []Model{}
-	for _, model := range allModels.Data {
-		if deployedModels[model.ID] {
-			deployedModelList = append(deployedModelList, model)
-		}
-	}
-
-	return deployedModelList, nil
+	return deployedModelsResponse.Data, nil
 }
 
 func handleOptions(c *gin.Context) {
