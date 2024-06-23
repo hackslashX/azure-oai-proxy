@@ -30,7 +30,9 @@ This proxy is particularly useful for:
 
 ## Important Note
 
-While this proxy serves as a convenient bridge, it's recommended to use the official Azure OpenAI SDK or API directly in production environments or when building new services. Direct integration offers:
+While azure oai proxy serves as a convenient bridge, it's recommended to use the official Azure OpenAI SDK or API directly in production environments or when building new services. 
+
+Direct integration offers:
 
 - Better performance
 - More reliable and up-to-date feature support
