@@ -197,20 +197,6 @@ func modifyResponse(res *http.Response) error {
 	return nil
 }
 
-func modifyResponse(res *http.Response) error {
-	// Handle rate limiting headers
-	if res.StatusCode == http.StatusTooManyRequests {
-		log.Printf("Rate limit exceeded: %s", res.Header.Get("Retry-After"))
-	}
-
-	// Handle streaming responses
-	if res.Header.Get("Content-Type") == "text/event-stream" {
-		res.Header.Set("X-Accel-Buffering", "no")
-	}
-
-	return nil
-}
-
 func GetDeploymentByModel(model string) string {
 	if v, ok := AzureOpenAIModelMapper[model]; ok {
 		return v
