@@ -2,6 +2,7 @@ package azure
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -131,8 +132,10 @@ func HandleToken(req *http.Request) {
 	}
 }
 
+// Update the makeDirector function to handle the new endpoint structure
 func makeDirector(remote *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
+
 		// Get model and map it to deployment
 		model := getModelFromRequest(req)
 		deployment := GetDeploymentByModel(model)
@@ -171,6 +174,23 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		}
 
 		req.URL.RawPath = req.URL.EscapedPath()
+
+		// Add logging for new parameters
+		if req.Body != nil {
+			var requestBody map[string]interface{}
+			bodyBytes, _ := ioutil.ReadAll(req.Body)
+			json.Unmarshal(bodyBytes, &requestBody)
+
+			newParams := []string{"completion_config", "presence_penalty", "frequency_penalty", "best_of"}
+			for _, param := range newParams {
+				if val, ok := requestBody[param]; ok {
+					log.Printf("Request includes %s parameter: %v", param, val)
+				}
+			}
+
+			// Restore the body to the request
+			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
 
 		// Add the api-version query parameter
 		query := req.URL.Query()
