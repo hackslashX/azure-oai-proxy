@@ -163,17 +163,25 @@ func handleToken(req *http.Request) {
 }
 
 func HandleToken(req *http.Request) {
-	token := ""
-	if AzureOpenAIToken != "" {
-		token = AzureOpenAIToken
-	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-		token = strings.TrimPrefix(authHeader, "Bearer ")
-	} else if apiKey := os.Getenv("AZURE_OPENAI_API_KEY"); apiKey != "" {
+	var token string
+	// Check for API Key in the api-key header
+	if apiKey := req.Header.Get("api-key"); apiKey != "" {
 		token = apiKey
+	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+		// If not found, check for Authorization header
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	} else if AzureOpenAIToken != "" {
+		// If neither is present, use the AzureOpenAIToken if set
+		token = AzureOpenAIToken
+	} else if envApiKey := os.Getenv("AZURE_OPENAI_API_KEY"); envApiKey != "" {
+		// As a last resort, check for API key in environment variable
+		token = envApiKey
 	}
 
 	if token != "" {
+		// Set the api-key header with the found token
 		req.Header.Set("api-key", token)
+		// Remove the Authorization header to avoid conflicts
 		req.Header.Del("Authorization")
 	}
 }
