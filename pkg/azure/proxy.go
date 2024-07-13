@@ -152,18 +152,12 @@ func getModelFromRequest(req *http.Request) string {
 }
 
 func handleToken(req *http.Request) {
-	token := ""
-	if AzureOpenAIToken != "" {
-		token = AzureOpenAIToken
-	} else {
-		token = strings.ReplaceAll(req.Header.Get("Authorization"), "Bearer ", "")
-	}
-	req.Header.Set("api-key", token)
-	req.Header.Del("Authorization")
+	HandleToken(req)
 }
 
 func HandleToken(req *http.Request) {
 	var token string
+
 	// Check for API Key in the api-key header
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
 		token = apiKey
@@ -183,6 +177,8 @@ func HandleToken(req *http.Request) {
 		req.Header.Set("api-key", token)
 		// Remove the Authorization header to avoid conflicts
 		req.Header.Del("Authorization")
+	} else {
+		log.Println("Warning: No authentication token found")
 	}
 }
 
