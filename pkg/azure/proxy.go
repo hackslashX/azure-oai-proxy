@@ -182,10 +182,45 @@ func HandleToken(req *http.Request) {
 	}
 }
 
+func makeDirector(remote *url.URL) func(*http.Request) {
+	return func(req *http.Request) {
+		// Get model and map it to deployment
+		model := getModelFromRequest(req)
+		deployment := GetDeploymentByModel(model)
+
+		// Handle token
+		HandleToken(req)
+
+		// Set the Host, Scheme, Path, and RawPath of the request
+		originURL := req.URL.String()
+		req.Host = remote.Host
+		req.URL.Scheme = remote.Scheme
+		req.URL.Host = remote.Host
+
+		// Handle different endpoints
+		switch {
+		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
+			// ... (other cases remain the same)
+		}
+
+		req.URL.RawPath = req.URL.EscapedPath()
+
+		// Add the api-version query parameter
+		query := req.URL.Query()
+		query.Add("api-version", AzureOpenAIAPIVersion)
+		req.URL.RawQuery = query.Encode()
+
+		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
+		log.Printf("Request Headers: %v", req.Header)
+	}
+}
+
 func modifyResponse(res *http.Response) error {
-	// Handle rate limiting headers
-	if res.StatusCode == http.StatusTooManyRequests {
-		log.Printf("Rate limit exceeded: %s", res.Header.Get("Retry-After"))
+	if res.StatusCode >= 400 {
+		body, _ := ioutil.ReadAll(res.Body)
+		log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
+		res.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	}
 
 	// Handle streaming responses
