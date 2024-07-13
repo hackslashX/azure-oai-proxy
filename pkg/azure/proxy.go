@@ -2,7 +2,6 @@ package azure
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -92,56 +91,6 @@ func NewOpenAIReverseProxy() *httputil.ReverseProxy {
 	}
 }
 
-func makeDirector(remote *url.URL) func(*http.Request) {
-	return func(req *http.Request) {
-		// Get model and map it to deployment
-		model := getModelFromRequest(req)
-		deployment := GetDeploymentByModel(model)
-
-		// Handle token
-		handleToken(req)
-
-		// Set the Host, Scheme, Path, and RawPath of the request
-		originURL := req.URL.String()
-		req.Host = remote.Host
-		req.URL.Scheme = remote.Scheme
-		req.URL.Host = remote.Host
-
-		// Handle different endpoints
-		switch {
-		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "chat/completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/completions"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "embeddings")
-		case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "images/generations")
-		case strings.HasPrefix(req.URL.Path, "/v1/fine_tunes"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "fine-tunes")
-		case strings.HasPrefix(req.URL.Path, "/v1/files"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "files")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/speech"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "audio/speech")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "transcriptions")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/translations"):
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), "translations")
-		default:
-			req.URL.Path = path.Join(fmt.Sprintf("/openai/deployments/%s", deployment), strings.TrimPrefix(req.URL.Path, "/v1/"))
-		}
-
-		req.URL.RawPath = req.URL.EscapedPath()
-
-		// Add the api-version query parameter
-		query := req.URL.Query()
-		query.Add("api-version", AzureOpenAIAPIVersion)
-		req.URL.RawQuery = query.Encode()
-
-		log.Printf("proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-	}
-}
-
 func getModelFromRequest(req *http.Request) string {
 	if req.Body == nil {
 		return ""
@@ -201,7 +150,24 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		switch {
 		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
 			req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
-			// ... (other cases remain the same)
+		case strings.HasPrefix(req.URL.Path, "/v1/completions"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
+		case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
+		case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "images/generations")
+		case strings.HasPrefix(req.URL.Path, "/v1/fine_tunes"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "fine-tunes")
+		case strings.HasPrefix(req.URL.Path, "/v1/files"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "files")
+		case strings.HasPrefix(req.URL.Path, "/v1/audio/speech"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "audio/speech")
+		case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "transcriptions")
+		case strings.HasPrefix(req.URL.Path, "/v1/audio/translations"):
+			req.URL.Path = path.Join("/openai/deployments", deployment, "translations")
+		default:
+			req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
 		}
 
 		req.URL.RawPath = req.URL.EscapedPath()
@@ -221,6 +187,20 @@ func modifyResponse(res *http.Response) error {
 		body, _ := ioutil.ReadAll(res.Body)
 		log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
 		res.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	}
+
+	// Handle streaming responses
+	if res.Header.Get("Content-Type") == "text/event-stream" {
+		res.Header.Set("X-Accel-Buffering", "no")
+	}
+
+	return nil
+}
+
+func modifyResponse(res *http.Response) error {
+	// Handle rate limiting headers
+	if res.StatusCode == http.StatusTooManyRequests {
+		log.Printf("Rate limit exceeded: %s", res.Header.Get("Retry-After"))
 	}
 
 	// Handle streaming responses
