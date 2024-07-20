@@ -173,6 +173,7 @@ These are the default mappings for the most common models, if your Azure OpenAI 
 | `"gpt-4"`                       | `"gpt-4-0613"`                |
 | `"gpt-4-32k"`                   | `"gpt-4-32k"`                 |
 | `"gpt-4-32k-0613"`              | `"gpt-4-32k-0613"`            |
+| `"gpt-4o-mini"`                 | `"gpt-4o-mini"`                    |
 | `"gpt-4o"`                      | `"gpt-4o"`                    |
 | `"gpt-4o-2024-05-13"`           | `"gpt-4o-2024-05-13"`         |
 | `"gpt-4-turbo"`                 | `"gpt-4-turbo"`               |
