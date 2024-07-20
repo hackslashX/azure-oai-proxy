@@ -208,7 +208,7 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		req.URL.RawQuery = query.Encode()
 
 		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		log.Printf("Sanitized Request Headers: %v", sanitizeHeaders(req.Header))
+		// log.Printf("Sanitized Request Headers: %v", sanitizeHeaders(req.Header))
 	}
 }
 
