@@ -3,7 +3,7 @@ package azure
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -31,6 +31,7 @@ var (
 		"gpt-4-32k":                   "gpt-4-32k",
 		"gpt-4-32k-0613":              "gpt-4-32k-0613",
 		"gpt-4o":                      "gpt-4o",
+		"gpt-4o-mini":                 "gpt-4o-mini",
 		"gpt-4o-2024-05-13":           "gpt-4o-2024-05-13",
 		"gpt-4-turbo":                 "gpt-4-turbo",
 		"gpt-4-vision-preview":        "gpt-4-vision-preview",
@@ -96,8 +97,8 @@ func getModelFromRequest(req *http.Request) string {
 	if req.Body == nil {
 		return ""
 	}
-	body, _ := ioutil.ReadAll(req.Body)
-	req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	body, _ := io.ReadAll(req.Body)
+	req.Body = io.NopCloser(bytes.NewBuffer(body))
 	return gjson.GetBytes(body, "model").String()
 }
 
@@ -178,7 +179,7 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		// Add logging for new parameters
 		if req.Body != nil {
 			var requestBody map[string]interface{}
-			bodyBytes, _ := ioutil.ReadAll(req.Body)
+			bodyBytes, _ := io.ReadAll(req.Body)
 			json.Unmarshal(bodyBytes, &requestBody)
 
 			newParams := []string{"completion_config", "presence_penalty", "frequency_penalty", "best_of"}
@@ -189,7 +190,7 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			}
 
 			// Restore the body to the request
-			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
 		// Add the api-version query parameter
@@ -204,9 +205,9 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 
 func modifyResponse(res *http.Response) error {
 	if res.StatusCode >= 400 {
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
-		res.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
 	// Handle streaming responses
