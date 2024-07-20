@@ -1,4 +1,4 @@
-FROM golang:1.22.4 AS builder
+FROM golang:1.22.5 AS builder
 WORKDIR /build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o azure-oai-proxy .
