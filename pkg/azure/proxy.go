@@ -3,6 +3,7 @@ package azure
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -102,10 +103,6 @@ func getModelFromRequest(req *http.Request) string {
 	return gjson.GetBytes(body, "model").String()
 }
 
-func handleToken(req *http.Request) {
-	HandleToken(req)
-}
-
 func HandleToken(req *http.Request) {
 	var token string
 
@@ -128,6 +125,7 @@ func HandleToken(req *http.Request) {
 		req.Header.Set("api-key", token)
 		// Remove the Authorization header to avoid conflicts
 		req.Header.Del("Authorization")
+		log.Println("API key set successfully")
 	} else {
 		log.Println("Warning: No authentication token found")
 	}
@@ -198,9 +196,39 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		query.Add("api-version", AzureOpenAIAPIVersion)
 		req.URL.RawQuery = query.Encode()
 
-		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		log.Printf("Request Headers: %v", req.Header)
+		log.Printf("Proxying request [%s] %s -> %s", maskString(model), originURL, maskURL(req.URL))
+		logSafeHeaders(req.Header)
 	}
+}
+
+// Helper function to mask sensitive parts of a string
+func maskString(s string) string {
+	if len(s) <= 4 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:2] + strings.Repeat("*", len(s)-4) + s[len(s)-2:]
+}
+
+// Helper function to mask sensitive parts of a URL
+func maskURL(u *url.URL) string {
+	maskedQuery := u.Query()
+	for key := range maskedQuery {
+		maskedQuery.Set(key, "****")
+	}
+	return fmt.Sprintf("%s://%s%s?%s", u.Scheme, u.Host, u.Path, maskedQuery.Encode())
+}
+
+// Helper function to log headers safely
+func logSafeHeaders(headers http.Header) {
+	safeHeaders := make(http.Header)
+	for key, values := range headers {
+		if strings.ToLower(key) == "authorization" || strings.ToLower(key) == "api-key" {
+			safeHeaders[key] = []string{"****"}
+		} else {
+			safeHeaders[key] = values
+		}
+	}
+	log.Printf("Request Headers: %v", safeHeaders)
 }
 
 func modifyResponse(res *http.Response) error {
