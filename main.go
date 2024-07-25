@@ -128,7 +128,7 @@ func handleGetModels(c *gin.Context) {
 	}
 
 	// Add serverless deployments to the models list
-	for deploymentName, info := range azure.ServerlessDeploymentInfo {
+	for deploymentName := range azure.ServerlessDeploymentInfo {
 		models = append(models, Model{
 			ID:     deploymentName,
 			Object: "model",
