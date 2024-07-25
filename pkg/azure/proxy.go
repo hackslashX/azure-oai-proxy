@@ -48,7 +48,8 @@ var (
 		"text-embedding-3-small":      "text-embedding-3-small-1",
 		"text-embedding-3-large":      "text-embedding-3-large-1",
 	}
-	fallbackModelMapper = regexp.MustCompile(`[.:]`)
+	AzureAIStudioDeployments = make(map[string]string)
+	fallbackModelMapper      = regexp.MustCompile(`[.:]`)
 )
 
 func init() {
@@ -58,14 +59,17 @@ func init() {
 	if v := os.Getenv("AZURE_OPENAI_ENDPOINT"); v != "" {
 		AzureOpenAIEndpoint = v
 	}
-	if v := os.Getenv("AZURE_OPENAI_MODEL_MAPPER"); v != "" {
+
+	handleModelMapper()
+
+	if v := os.Getenv("AZURE_AI_STUDIO_DEPLOYMENTS"); v != "" {
 		for _, pair := range strings.Split(v, ",") {
 			info := strings.Split(pair, "=")
-			if len(info) != 2 {
-				log.Printf("error parsing AZURE_OPENAI_MODEL_MAPPER, invalid value %s", pair)
-				os.Exit(1)
+			if len(info) == 2 {
+				AzureAIStudioDeployments[info[0]] = info[1]
+			} else {
+				log.Printf("error parsing AZURE_AI_STUDIO_DEPLOYMENTS, invalid value %s", pair)
 			}
-			AzureOpenAIModelMapper[info[0]] = info[1]
 		}
 	}
 	if v := os.Getenv("AZURE_OPENAI_TOKEN"); v != "" {
@@ -76,7 +80,35 @@ func init() {
 	log.Printf("loading azure api endpoint: %s", AzureOpenAIEndpoint)
 	log.Printf("loading azure api version: %s", AzureOpenAIAPIVersion)
 	for k, v := range AzureOpenAIModelMapper {
-		log.Printf("loading azure model mapper: %s -> %s", k, v)
+		log.Printf("final azure model mapper: %s -> %s", k, v)
+	}
+	for k, v := range AzureAIStudioDeployments {
+		log.Printf("loading azure ai studio deployment: %s -> %s", k, v)
+	}
+}
+
+func handleModelMapper() {
+	overrideMode := strings.ToLower(os.Getenv("AZURE_OPENAI_MODEL_MAPPER_MODE")) == "override"
+
+	if v := os.Getenv("AZURE_OPENAI_MODEL_MAPPER"); v != "" {
+		for _, pair := range strings.Split(v, ",") {
+			info := strings.Split(pair, "=")
+			if len(info) == 2 {
+				if overrideMode {
+					AzureOpenAIModelMapper[info[0]] = info[1]
+					log.Printf("Overriding model mapping: %s -> %s", info[0], info[1])
+				} else {
+					if _, exists := AzureOpenAIModelMapper[info[0]]; !exists {
+						AzureOpenAIModelMapper[info[0]] = info[1]
+						log.Printf("Adding new model mapping: %s -> %s", info[0], info[1])
+					} else {
+						log.Printf("Skipping existing model mapping: %s", info[0])
+					}
+				}
+			} else {
+				log.Printf("error parsing AZURE_OPENAI_MODEL_MAPPER, invalid value %s", pair)
+			}
+		}
 	}
 }
 
@@ -102,7 +134,6 @@ func getModelFromRequest(req *http.Request) string {
 	return gjson.GetBytes(body, "model").String()
 }
 
-// sanitizeHeaders returns a copy of the headers with sensitive information redacted
 func sanitizeHeaders(headers http.Header) http.Header {
 	sanitized := make(http.Header)
 	for key, values := range headers {
@@ -118,48 +149,36 @@ func sanitizeHeaders(headers http.Header) http.Header {
 func HandleToken(req *http.Request) {
 	var token string
 
-	// Check for API Key in the api-key header
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
 		token = apiKey
 	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-		// If not found, check for Authorization header
 		token = strings.TrimPrefix(authHeader, "Bearer ")
 	} else if AzureOpenAIToken != "" {
-		// If neither is present, use the AzureOpenAIToken if set
 		token = AzureOpenAIToken
 	} else if envApiKey := os.Getenv("AZURE_OPENAI_API_KEY"); envApiKey != "" {
-		// As a last resort, check for API key in environment variable
 		token = envApiKey
 	}
 
 	if token != "" {
-		// Set the api-key header with the found token
 		req.Header.Set("api-key", token)
-		// Remove the Authorization header to avoid conflicts
 		req.Header.Del("Authorization")
 	} else {
 		log.Println("Warning: No authentication token found")
 	}
 }
 
-// Update the makeDirector function to handle the new endpoint structure
 func makeDirector(remote *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
-
-		// Get model and map it to deployment
 		model := getModelFromRequest(req)
 		deployment := GetDeploymentByModel(model)
 
-		// Handle token
 		HandleToken(req)
 
-		// Set the Host, Scheme, Path, and RawPath of the request
 		originURL := req.URL.String()
 		req.Host = remote.Host
 		req.URL.Scheme = remote.Scheme
 		req.URL.Host = remote.Host
 
-		// Handle different endpoints
 		switch {
 		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
 			req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
@@ -185,7 +204,6 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 
 		req.URL.RawPath = req.URL.EscapedPath()
 
-		// Add logging for new parameters
 		if req.Body != nil {
 			var requestBody map[string]interface{}
 			bodyBytes, _ := io.ReadAll(req.Body)
@@ -198,17 +216,14 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 				}
 			}
 
-			// Restore the body to the request
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		// Add the api-version query parameter
 		query := req.URL.Query()
 		query.Add("api-version", AzureOpenAIAPIVersion)
 		req.URL.RawQuery = query.Encode()
 
 		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		// log.Printf("Sanitized Request Headers: %v", sanitizeHeaders(req.Header))
 	}
 }
 
@@ -219,7 +234,6 @@ func modifyResponse(res *http.Response) error {
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
-	// Handle streaming responses
 	if res.Header.Get("Content-Type") == "text/event-stream" {
 		res.Header.Set("X-Accel-Buffering", "no")
 	}
