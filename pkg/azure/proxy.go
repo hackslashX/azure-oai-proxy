@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -141,7 +142,15 @@ func proxyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(resp.Sta// Removed duplicate function declarationctDeploymentFromPath(path)
+	w.WriteHeader(resp.StatusCode)
+	_, err = w.Write(respBody)
+	if err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func handleToken(req *http.Request, path string) {
+	deployment := extractDeploymentFromPath(path)
 
 	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
 		req.Header.Set("Authorization", "Bearer "+info.Key)
@@ -240,22 +249,12 @@ func sanitizeHeaders(headers http.Header) http.Header {
 	return sanitized
 }
 
-func extractDeploymentFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		if part == "deployments" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-	return ""
-}
-
 func makeDirector(remote *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
 		model := getModelFromRequest(req)
 		deployment := GetDeploymentByModel(model)
 
-		HandleToken(req)
+		handleToken(req, req.URL.Path)
 
 		originURL := req.URL.String()
 
