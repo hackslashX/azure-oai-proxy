@@ -7,10 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gyarbij/azure-oai-proxy/pkg/azure"
 	"github.com/gyarbij/azure-oai-proxy/pkg/openai"
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -49,6 +51,11 @@ type Deprecation struct {
 }
 
 func init() {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	if v := os.Getenv("AZURE_OPENAI_PROXY_ADDRESS"); v != "" {
 		Address = v
@@ -58,6 +65,16 @@ func init() {
 	}
 	log.Printf("loading azure openai proxy address: %s", Address)
 	log.Printf("loading azure openai proxy mode: %s", ProxyMode)
+
+	// Load Azure OpenAI Model Mapper
+	if v := os.Getenv("AZURE_OPENAI_MODEL_MAPPER"); v != "" {
+		for _, pair := range strings.Split(v, ",") {
+			info := strings.Split(pair, "=")
+			if len(info) == 2 {
+				azure.AzureOpenAIModelMapper[info[0]] = info[1]
+			}
+		}
+	}
 }
 
 func main() {
@@ -109,6 +126,22 @@ func handleGetModels(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch deployed models"})
 		return
 	}
+
+	// Add serverless deployments to the models list
+	for deploymentName := range azure.ServerlessDeploymentInfo {
+		models = append(models, Model{
+			ID:     deploymentName,
+			Object: "model",
+			Capabilities: Capabilities{
+				Completion:     true,
+				ChatCompletion: true,
+				Inference:      true,
+			},
+			LifecycleStatus: "active",
+			Status:          "ready",
+		})
+	}
+
 	result := ModelList{
 		Object: "list",
 		Data:   models,

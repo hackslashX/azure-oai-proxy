@@ -2,7 +2,7 @@ package azure
 
 import (
 	"bytes"
-	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -10,16 +10,49 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"regexp"
 	"strings"
 
 	"github.com/tidwall/gjson"
 )
 
 var (
-	AzureOpenAIToken       = ""
-	AzureOpenAIAPIVersion  = "2024-06-01"
-	AzureOpenAIEndpoint    = ""
+	AzureOpenAIAPIVersion    = "2024-06-01"
+	AzureOpenAIEndpoint      = ""
+	ServerlessDeploymentInfo = make(map[string]ServerlessDeployment)
+	AzureOpenAIModelMapper   = make(map[string]string)
+)
+
+type ServerlessDeployment struct {
+	Name   string
+	Region string
+	Key    string
+}
+
+func init() {
+	if v := os.Getenv("AZURE_OPENAI_APIVERSION"); v != "" {
+		AzureOpenAIAPIVersion = v
+	}
+	if v := os.Getenv("AZURE_OPENAI_ENDPOINT"); v != "" {
+		AzureOpenAIEndpoint = v
+	}
+
+	if v := os.Getenv("AZURE_AI_STUDIO_DEPLOYMENTS"); v != "" {
+		for _, pair := range strings.Split(v, ",") {
+			info := strings.Split(pair, "=")
+			if len(info) == 2 {
+				deploymentInfo := strings.Split(info[1], ":")
+				if len(deploymentInfo) == 2 {
+					ServerlessDeploymentInfo[strings.ToLower(info[0])] = ServerlessDeployment{
+						Name:   deploymentInfo[0],
+						Region: deploymentInfo[1],
+						Key:    os.Getenv("AZURE_OPENAI_KEY_" + strings.ToUpper(info[0])),
+					}
+				}
+			}
+		}
+	}
+
+	// Initialize AzureOpenAIModelMapper (you might want to load this from an environment variable or config file)
 	AzureOpenAIModelMapper = map[string]string{
 		"gpt-3.5-turbo":               "gpt-35-turbo",
 		"gpt-3.5-turbo-0125":          "gpt-35-turbo-0125",
@@ -48,61 +81,151 @@ var (
 		"text-embedding-3-small":      "text-embedding-3-small-1",
 		"text-embedding-3-large":      "text-embedding-3-large-1",
 	}
-	fallbackModelMapper = regexp.MustCompile(`[.:]`)
-)
 
-func init() {
-	if v := os.Getenv("AZURE_OPENAI_APIVERSION"); v != "" {
-		AzureOpenAIAPIVersion = v
-	}
-	if v := os.Getenv("AZURE_OPENAI_ENDPOINT"); v != "" {
-		AzureOpenAIEndpoint = v
-	}
-	if v := os.Getenv("AZURE_OPENAI_MODEL_MAPPER"); v != "" {
-		for _, pair := range strings.Split(v, ",") {
-			info := strings.Split(pair, "=")
-			if len(info) != 2 {
-				log.Printf("error parsing AZURE_OPENAI_MODEL_MAPPER, invalid value %s", pair)
-				os.Exit(1)
-			}
-			AzureOpenAIModelMapper[info[0]] = info[1]
-		}
-	}
-	if v := os.Getenv("AZURE_OPENAI_TOKEN"); v != "" {
-		AzureOpenAIToken = v
-		log.Printf("loading azure api token from env")
-	}
-
-	log.Printf("loading azure api endpoint: %s", AzureOpenAIEndpoint)
-	log.Printf("loading azure api version: %s", AzureOpenAIAPIVersion)
-	for k, v := range AzureOpenAIModelMapper {
-		log.Printf("loading azure model mapper: %s -> %s", k, v)
-	}
+	log.Printf("Loaded ServerlessDeploymentInfo: %+v", ServerlessDeploymentInfo)
+	log.Printf("Azure OpenAI Endpoint: %s", AzureOpenAIEndpoint)
+	log.Printf("Azure OpenAI API Version: %s", AzureOpenAIAPIVersion)
 }
 
 func NewOpenAIReverseProxy() *httputil.ReverseProxy {
-	remote, err := url.Parse(AzureOpenAIEndpoint)
-	if err != nil {
-		log.Printf("error parse endpoint: %s\n", AzureOpenAIEndpoint)
-		os.Exit(1)
-	}
-
 	return &httputil.ReverseProxy{
-		Director:       makeDirector(remote),
+		Director:       makeDirector(),
 		ModifyResponse: modifyResponse,
 	}
 }
 
-func getModelFromRequest(req *http.Request) string {
-	if req.Body == nil {
-		return ""
+func HandleToken(req *http.Request) {
+	model := getModelFromRequest(req)
+	modelLower := strings.ToLower(model)
+
+	// Check if it's a serverless deployment
+	if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
+		// Set the correct authorization header for serverless
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+		req.Header.Del("api-key")
+		log.Printf("Using serverless deployment authentication for %s", model)
+	} else {
+		// For regular Azure OpenAI deployments, use the api-key
+		apiKey := req.Header.Get("api-key")
+		if apiKey == "" {
+			apiKey = req.Header.Get("Authorization")
+			if strings.HasPrefix(apiKey, "Bearer ") {
+				apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+			}
+		}
+		if apiKey == "" {
+			log.Printf("Warning: No api-key or Authorization header found for deployment: %s", model)
+		} else {
+			req.Header.Set("api-key", apiKey)
+			req.Header.Del("Authorization")
+			log.Printf("Using regular Azure OpenAI authentication for %s", model)
+		}
 	}
-	body, _ := io.ReadAll(req.Body)
-	req.Body = io.NopCloser(bytes.NewBuffer(body))
-	return gjson.GetBytes(body, "model").String()
 }
 
-// sanitizeHeaders returns a copy of the headers with sensitive information redacted
+func makeDirector() func(*http.Request) {
+	return func(req *http.Request) {
+		model := getModelFromRequest(req)
+		originURL := req.URL.String()
+		log.Printf("Original request URL: %s for model: %s", originURL, model)
+
+		// Handle the token
+		HandleToken(req)
+
+		// Convert model to lowercase for case-insensitive matching
+		modelLower := strings.ToLower(model)
+
+		// Check if it's a serverless deployment
+		if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
+			handleServerlessRequest(req, info, model)
+		} else if azureModel, ok := AzureOpenAIModelMapper[modelLower]; ok {
+			handleRegularRequest(req, azureModel)
+		} else {
+			log.Printf("Warning: Unknown model %s, treating as regular Azure OpenAI deployment", model)
+			handleRegularRequest(req, model)
+		}
+
+		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
+		// log.Printf("Final request headers: %v", sanitizeHeaders(req.Header))
+	}
+}
+
+func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model string) {
+	req.URL.Scheme = "https"
+	req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
+	req.Host = req.URL.Host
+
+	// Preserve query parameters from the original request
+	originalQuery := req.URL.Query()
+	for key, values := range originalQuery {
+		for _, value := range values {
+			req.URL.Query().Add(key, value)
+		}
+	}
+
+	// Set the correct authorization header for serverless
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+	req.Header.Del("api-key")
+
+	log.Printf("Using serverless deployment for %s", model)
+}
+
+func handleRegularRequest(req *http.Request, deployment string) {
+	remote, _ := url.Parse(AzureOpenAIEndpoint)
+	req.URL.Scheme = remote.Scheme
+	req.URL.Host = remote.Host
+	req.Host = remote.Host
+
+	// Construct the path for regular Azure OpenAI deployments
+	switch {
+	case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
+		req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
+	case strings.HasPrefix(req.URL.Path, "/v1/completions"):
+		req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
+	case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
+		req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
+	// Add other cases as needed
+	default:
+		req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
+	}
+
+	// Add api-version query parameter
+	query := req.URL.Query()
+	query.Add("api-version", AzureOpenAIAPIVersion)
+	req.URL.RawQuery = query.Encode()
+
+	// Use the api-key from the original request for regular deployments
+	apiKey := req.Header.Get("api-key")
+	if apiKey == "" {
+		log.Printf("Warning: No api-key found for regular deployment: %s", deployment)
+	}
+
+	log.Printf("Using regular Azure OpenAI deployment for %s", deployment)
+}
+
+func getModelFromRequest(req *http.Request) string {
+	// First, try to get the model from the URL path
+	parts := strings.Split(req.URL.Path, "/")
+	for i, part := range parts {
+		if part == "deployments" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+
+	// If not found in the path, try to get it from the request body
+	if req.Body != nil {
+		body, _ := io.ReadAll(req.Body)
+		req.Body = io.NopCloser(bytes.NewBuffer(body))
+		model := gjson.GetBytes(body, "model").String()
+		if model != "" {
+			return model
+		}
+	}
+
+	// If still not found, return an empty string
+	return ""
+}
+
 func sanitizeHeaders(headers http.Header) http.Header {
 	sanitized := make(http.Header)
 	for key, values := range headers {
@@ -115,103 +238,6 @@ func sanitizeHeaders(headers http.Header) http.Header {
 	return sanitized
 }
 
-func HandleToken(req *http.Request) {
-	var token string
-
-	// Check for API Key in the api-key header
-	if apiKey := req.Header.Get("api-key"); apiKey != "" {
-		token = apiKey
-	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-		// If not found, check for Authorization header
-		token = strings.TrimPrefix(authHeader, "Bearer ")
-	} else if AzureOpenAIToken != "" {
-		// If neither is present, use the AzureOpenAIToken if set
-		token = AzureOpenAIToken
-	} else if envApiKey := os.Getenv("AZURE_OPENAI_API_KEY"); envApiKey != "" {
-		// As a last resort, check for API key in environment variable
-		token = envApiKey
-	}
-
-	if token != "" {
-		// Set the api-key header with the found token
-		req.Header.Set("api-key", token)
-		// Remove the Authorization header to avoid conflicts
-		req.Header.Del("Authorization")
-	} else {
-		log.Println("Warning: No authentication token found")
-	}
-}
-
-// Update the makeDirector function to handle the new endpoint structure
-func makeDirector(remote *url.URL) func(*http.Request) {
-	return func(req *http.Request) {
-
-		// Get model and map it to deployment
-		model := getModelFromRequest(req)
-		deployment := GetDeploymentByModel(model)
-
-		// Handle token
-		HandleToken(req)
-
-		// Set the Host, Scheme, Path, and RawPath of the request
-		originURL := req.URL.String()
-		req.Host = remote.Host
-		req.URL.Scheme = remote.Scheme
-		req.URL.Host = remote.Host
-
-		// Handle different endpoints
-		switch {
-		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/completions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
-		case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "images/generations")
-		case strings.HasPrefix(req.URL.Path, "/v1/fine_tunes"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "fine-tunes")
-		case strings.HasPrefix(req.URL.Path, "/v1/files"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "files")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/speech"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "audio/speech")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "transcriptions")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/translations"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "translations")
-		default:
-			req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
-		}
-
-		req.URL.RawPath = req.URL.EscapedPath()
-
-		// Add logging for new parameters
-		if req.Body != nil {
-			var requestBody map[string]interface{}
-			bodyBytes, _ := io.ReadAll(req.Body)
-			json.Unmarshal(bodyBytes, &requestBody)
-
-			newParams := []string{"completion_config", "presence_penalty", "frequency_penalty", "best_of"}
-			for _, param := range newParams {
-				if val, ok := requestBody[param]; ok {
-					log.Printf("Request includes %s parameter: %v", param, val)
-				}
-			}
-
-			// Restore the body to the request
-			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		}
-
-		// Add the api-version query parameter
-		query := req.URL.Query()
-		query.Add("api-version", AzureOpenAIAPIVersion)
-		req.URL.RawQuery = query.Encode()
-
-		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		// log.Printf("Sanitized Request Headers: %v", sanitizeHeaders(req.Header))
-	}
-}
-
 func modifyResponse(res *http.Response) error {
 	if res.StatusCode >= 400 {
 		body, _ := io.ReadAll(res.Body)
@@ -219,17 +245,9 @@ func modifyResponse(res *http.Response) error {
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
-	// Handle streaming responses
 	if res.Header.Get("Content-Type") == "text/event-stream" {
 		res.Header.Set("X-Accel-Buffering", "no")
 	}
 
 	return nil
-}
-
-func GetDeploymentByModel(model string) string {
-	if v, ok := AzureOpenAIModelMapper[model]; ok {
-		return v
-	}
-	return fallbackModelMapper.ReplaceAllString(model, "")
 }
