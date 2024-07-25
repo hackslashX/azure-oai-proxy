@@ -215,7 +215,7 @@ For custom fine-tuned models, the model name can be passed directly. For models 
 ## Recently Updated
 
 + 2024-07-25 Implemented support for Azure AI Studio deployments with support for Meta LLama 3.1, Mistral-2407 (mistral large 2), and other open models including from Cohere AI.
-+ 2024-07-18 Added support for `gpt4o-mini`.
++ 2024-07-18 Added support for `gpt-4o-mini`.
 + 2024-06-23 Implemented dynamic model fetching for `/v1/models endpoint`, replacing hardcoded model list.
 + 2024-06-23 Unified token handling mechanism across the application, improving consistency and security.
 + 2024-06-23 Added support for audio-related endpoints: `/v1/audio/speech`, `/v1/audio/transcriptions`, and `/v1/audio/translations`.
