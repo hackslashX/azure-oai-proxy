@@ -3,6 +3,7 @@ package azure
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -49,9 +50,15 @@ var (
 		"text-embedding-3-large":      "text-embedding-3-large-1",
 	}
 	AzureAIStudioDeployments = make(map[string]string)
-	ServerlessDeploymentKeys = make(map[string]string)
+	ServerlessDeploymentInfo = make(map[string]ServerlessDeployment)
 	fallbackModelMapper      = regexp.MustCompile(`[.:]`)
 )
+
+type ServerlessDeployment struct {
+	Name   string
+	Region string
+	Key    string
+}
 
 func init() {
 	if v := os.Getenv("AZURE_OPENAI_APIVERSION"); v != "" {
@@ -67,12 +74,21 @@ func init() {
 		for _, pair := range strings.Split(v, ",") {
 			info := strings.Split(pair, "=")
 			if len(info) == 2 {
-				AzureAIStudioDeployments[info[0]] = info[1]
+				deploymentInfo := strings.Split(info[1], ":")
+				if len(deploymentInfo) == 2 {
+					AzureAIStudioDeployments[info[0]] = deploymentInfo[0]
+					ServerlessDeploymentInfo[strings.ToLower(info[0])] = ServerlessDeployment{
+						Name:   deploymentInfo[0],
+						Region: deploymentInfo[1],
+						Key:    os.Getenv("AZURE_OPENAI_KEY_" + strings.ToUpper(info[0])),
+					}
+				}
 			} else {
 				log.Printf("error parsing AZURE_AI_STUDIO_DEPLOYMENTS, invalid value %s", pair)
 			}
 		}
 	}
+
 	if v := os.Getenv("AZURE_OPENAI_TOKEN"); v != "" {
 		AzureOpenAIToken = v
 		log.Printf("loading azure api token from env")
@@ -86,28 +102,15 @@ func init() {
 	for k, v := range AzureAIStudioDeployments {
 		log.Printf("loading azure ai studio deployment: %s -> %s", k, v)
 	}
-
-	// Initialize ServerlessDeploymentKeys
-	for _, env := range os.Environ() {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			key, value := parts[0], parts[1]
-			if strings.HasPrefix(key, "AZURE_OPENAI_KEY_") {
-				deploymentName := strings.TrimPrefix(key, "AZURE_OPENAI_KEY_")
-				ServerlessDeploymentKeys[strings.ToLower(deploymentName)] = value
-			}
-		}
-	}
-
-	log.Printf("Loaded %d serverless deployment keys", len(ServerlessDeploymentKeys))
+	log.Printf("Loaded %d serverless deployment infos", len(ServerlessDeploymentInfo))
 }
 
 func HandleToken(req *http.Request) {
 	deployment := extractDeploymentFromPath(req.URL.Path)
 
 	// Check if it's a serverless deployment
-	if apiKey, ok := ServerlessDeploymentKeys[strings.ToLower(deployment)]; ok {
-		req.Header.Set("api-key", apiKey)
+	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
+		req.Header.Set("api-key", info.Key)
 		req.Header.Del("Authorization")
 		return
 	}
@@ -210,9 +213,17 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		HandleToken(req)
 
 		originURL := req.URL.String()
-		req.Host = remote.Host
-		req.URL.Scheme = remote.Scheme
-		req.URL.Host = remote.Host
+
+		// Check if it's a serverless deployment
+		if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
+			req.URL.Scheme = "https"
+			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
+			req.Host = req.URL.Host
+		} else {
+			req.Host = remote.Host
+			req.URL.Scheme = remote.Scheme
+			req.URL.Host = remote.Host
+		}
 
 		switch {
 		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
