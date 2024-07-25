@@ -108,15 +108,33 @@ func init() {
 func HandleToken(req *http.Request) {
 	deployment := extractDeploymentFromPath(req.URL.Path)
 
-	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
-		req.Header.Del("api-key")
-		log.Printf("Using serverless deployment authentication for %s", deployment)
+	// First, try an exact match
+	if info, ok := ServerlessDeploymentInfo[deployment]; ok {
+		setServerlessAuth(req, info, deployment)
 		return
 	}
 
-	var token string
+	// If no exact match, try case-insensitive match
+	for key, info := range ServerlessDeploymentInfo {
+		if strings.EqualFold(key, deployment) {
+			setServerlessAuth(req, info, deployment)
+			return
+		}
+	}
 
+	// If no serverless match, proceed with regular Azure OpenAI authentication
+	handleRegularAuth(req, deployment)
+}
+
+func setServerlessAuth(req *http.Request, info ServerlessDeployment, deployment string) {
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+	req.Header.Del("api-key")
+	log.Printf("Using serverless deployment authentication for %s", deployment)
+}
+
+func handleRegularAuth(req *http.Request, deployment string) {
+	// Existing code for regular Azure OpenAI authentication
+	var token string
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
 		token = apiKey
 	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
