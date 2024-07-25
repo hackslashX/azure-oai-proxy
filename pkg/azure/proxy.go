@@ -219,33 +219,37 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.URL.Scheme = "https"
 			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
 			req.Host = req.URL.Host
+
+			// For serverless, keep the original path with '/v1' prefix
+			req.URL.Path = req.URL.Path
 		} else {
 			req.Host = remote.Host
 			req.URL.Scheme = remote.Scheme
 			req.URL.Host = remote.Host
-		}
 
-		switch {
-		case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/completions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
-		case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
-		case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "images/generations")
-		case strings.HasPrefix(req.URL.Path, "/v1/fine_tunes"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "fine-tunes")
-		case strings.HasPrefix(req.URL.Path, "/v1/files"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "files")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/speech"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "audio/speech")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "transcriptions")
-		case strings.HasPrefix(req.URL.Path, "/v1/audio/translations"):
-			req.URL.Path = path.Join("/openai/deployments", deployment, "translations")
-		default:
-			req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
+			// For regular Azure OpenAI, construct the path
+			switch {
+			case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
+			case strings.HasPrefix(req.URL.Path, "/v1/completions"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
+			case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
+			case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "images/generations")
+			case strings.HasPrefix(req.URL.Path, "/v1/fine_tunes"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "fine-tunes")
+			case strings.HasPrefix(req.URL.Path, "/v1/files"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "files")
+			case strings.HasPrefix(req.URL.Path, "/v1/audio/speech"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "audio/speech")
+			case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "transcriptions")
+			case strings.HasPrefix(req.URL.Path, "/v1/audio/translations"):
+				req.URL.Path = path.Join("/openai/deployments", deployment, "translations")
+			default:
+				req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
+			}
 		}
 
 		req.URL.RawPath = req.URL.EscapedPath()
