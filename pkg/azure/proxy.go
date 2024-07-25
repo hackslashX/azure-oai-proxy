@@ -214,16 +214,12 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 
 		originURL := req.URL.String()
 
-		isServerless := false
-		// Check if it's a serverless deployment
 		if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
-			isServerless = true
 			req.URL.Scheme = "https"
 			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
 			req.Host = req.URL.Host
-
 			// For serverless, keep the original path with '/v1' prefix
-			req.URL.Path = req.URL.Path
+			log.Printf("Using serverless deployment for %s", deployment)
 		} else {
 			req.Host = remote.Host
 			req.URL.Scheme = remote.Scheme
@@ -252,6 +248,11 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			default:
 				req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
 			}
+
+			// Only add api-version for non-serverless deployments
+			query := req.URL.Query()
+			query.Add("api-version", AzureOpenAIAPIVersion)
+			req.URL.RawQuery = query.Encode()
 		}
 
 		req.URL.RawPath = req.URL.EscapedPath()
@@ -271,13 +272,6 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		// Only add api-version for non-serverless deployments
-		if !isServerless {
-			query := req.URL.Query()
-			query.Add("api-version", AzureOpenAIAPIVersion)
-			req.URL.RawQuery = query.Encode()
-		}
-
 		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
 	}
 }
@@ -289,6 +283,7 @@ func modifyResponse(res *http.Response) error {
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
+	// Handle streaming responses
 	if res.Header.Get("Content-Type") == "text/event-stream" {
 		res.Header.Set("X-Accel-Buffering", "no")
 	}
