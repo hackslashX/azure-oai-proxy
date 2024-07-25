@@ -88,14 +88,49 @@ func init() {
 	}
 
 	// Initialize ServerlessDeploymentKeys
-	for key, value := range os.Environ() {
-		if strings.HasPrefix(key, "AZURE_OPENAI_KEY_") {
-			deploymentName := strings.TrimPrefix(key, "AZURE_OPENAI_KEY_")
-			ServerlessDeploymentKeys[strings.ToLower(deploymentName)] = value
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			key, value := parts[0], parts[1]
+			if strings.HasPrefix(key, "AZURE_OPENAI_KEY_") {
+				deploymentName := strings.TrimPrefix(key, "AZURE_OPENAI_KEY_")
+				ServerlessDeploymentKeys[strings.ToLower(deploymentName)] = value
+			}
 		}
 	}
 
 	log.Printf("Loaded %d serverless deployment keys", len(ServerlessDeploymentKeys))
+}
+
+func HandleToken(req *http.Request) {
+	deployment := extractDeploymentFromPath(req.URL.Path)
+
+	// Check if it's a serverless deployment
+	if apiKey, ok := ServerlessDeploymentKeys[strings.ToLower(deployment)]; ok {
+		req.Header.Set("api-key", apiKey)
+		req.Header.Del("Authorization")
+		return
+	}
+
+	// Existing token handling logic
+	var token string
+
+	if apiKey := req.Header.Get("api-key"); apiKey != "" {
+		token = apiKey
+	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	} else if AzureOpenAIToken != "" {
+		token = AzureOpenAIToken
+	} else if envApiKey := os.Getenv("AZURE_OPENAI_API_KEY"); envApiKey != "" {
+		token = envApiKey
+	}
+
+	if token != "" {
+		req.Header.Set("api-key", token)
+		req.Header.Del("Authorization")
+	} else {
+		log.Println("Warning: No authentication token found for deployment:", deployment)
+	}
 }
 
 func handleModelMapper() {
@@ -155,37 +190,6 @@ func sanitizeHeaders(headers http.Header) http.Header {
 		}
 	}
 	return sanitized
-}
-
-func HandleToken(req *http.Request) {
-	deployment := extractDeploymentFromPath(req.URL.Path)
-
-	// Check if it's a serverless deployment
-	if apiKey, ok := ServerlessDeploymentKeys[strings.ToLower(deployment)]; ok {
-		req.Header.Set("api-key", apiKey)
-		req.Header.Del("Authorization")
-		return
-	}
-
-	// Existing token handling logic
-	var token string
-
-	if apiKey := req.Header.Get("api-key"); apiKey != "" {
-		token = apiKey
-	} else if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-		token = strings.TrimPrefix(authHeader, "Bearer ")
-	} else if AzureOpenAIToken != "" {
-		token = AzureOpenAIToken
-	} else if envApiKey := os.Getenv("AZURE_OPENAI_API_KEY"); envApiKey != "" {
-		token = envApiKey
-	}
-
-	if token != "" {
-		req.Header.Set("api-key", token)
-		req.Header.Del("Authorization")
-	} else {
-		log.Println("Warning: No authentication token found for deployment:", deployment)
-	}
 }
 
 func extractDeploymentFromPath(path string) string {
