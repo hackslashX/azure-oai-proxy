@@ -148,6 +148,21 @@ func handleGetModels(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch deployed models"})
 		return
 	}
+
+	// Add serverless deployments to the models list
+	for deploymentName := range azure.ServerlessDeploymentKeys {
+		models = append(models, Model{
+			ID:     deploymentName,
+			Object: "model",
+			Capabilities: Capabilities{
+				Completion:     true,
+				ChatCompletion: true,
+			},
+			LifecycleStatus: "active",
+			Status:          "ready",
+		})
+	}
+
 	result := ModelList{
 		Object: "list",
 		Data:   models,
