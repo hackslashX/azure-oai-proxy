@@ -49,6 +49,7 @@ var (
 		"text-embedding-3-large":      "text-embedding-3-large-1",
 	}
 	AzureAIStudioDeployments = make(map[string]string)
+	ServerlessDeploymentKeys = make(map[string]string)
 	fallbackModelMapper      = regexp.MustCompile(`[.:]`)
 )
 
@@ -85,6 +86,16 @@ func init() {
 	for k, v := range AzureAIStudioDeployments {
 		log.Printf("loading azure ai studio deployment: %s -> %s", k, v)
 	}
+
+	// Initialize ServerlessDeploymentKeys
+	for key, value := range os.Environ() {
+		if strings.HasPrefix(key, "AZURE_OPENAI_KEY_") {
+			deploymentName := strings.TrimPrefix(key, "AZURE_OPENAI_KEY_")
+			ServerlessDeploymentKeys[strings.ToLower(deploymentName)] = value
+		}
+	}
+
+	log.Printf("Loaded %d serverless deployment keys", len(ServerlessDeploymentKeys))
 }
 
 func handleModelMapper() {
@@ -147,6 +158,16 @@ func sanitizeHeaders(headers http.Header) http.Header {
 }
 
 func HandleToken(req *http.Request) {
+	deployment := extractDeploymentFromPath(req.URL.Path)
+
+	// Check if it's a serverless deployment
+	if apiKey, ok := ServerlessDeploymentKeys[strings.ToLower(deployment)]; ok {
+		req.Header.Set("api-key", apiKey)
+		req.Header.Del("Authorization")
+		return
+	}
+
+	// Existing token handling logic
 	var token string
 
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
@@ -163,8 +184,18 @@ func HandleToken(req *http.Request) {
 		req.Header.Set("api-key", token)
 		req.Header.Del("Authorization")
 	} else {
-		log.Println("Warning: No authentication token found")
+		log.Println("Warning: No authentication token found for deployment:", deployment)
 	}
+}
+
+func extractDeploymentFromPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "deployments" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
 }
 
 func makeDirector(remote *url.URL) func(*http.Request) {
