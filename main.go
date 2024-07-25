@@ -51,18 +51,6 @@ type Deprecation struct {
 }
 
 func init() {
-	gin.SetMode(gin.ReleaseMode)
-	if v := os.Getenv("AZURE_OPENAI_PROXY_ADDRESS"); v != "" {
-		Address = v
-	}
-	if v := os.Getenv("AZURE_OPENAI_PROXY_MODE"); v != "" {
-		ProxyMode = v
-	}
-	log.Printf("loading azure openai proxy address: %s", Address)
-	log.Printf("loading azure openai proxy mode: %s", ProxyMode)
-}
-
-func init() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
@@ -84,16 +72,6 @@ func init() {
 			info := strings.Split(pair, "=")
 			if len(info) == 2 {
 				azure.AzureOpenAIModelMapper[info[0]] = info[1]
-			}
-		}
-	}
-
-	// Load Azure AI Studio Deployments
-	if v := os.Getenv("AZURE_AI_STUDIO_DEPLOYMENTS"); v != "" {
-		for _, pair := range strings.Split(v, ",") {
-			info := strings.Split(pair, "=")
-			if len(info) == 2 {
-				azure.AzureAIStudioDeployments[info[0]] = info[1]
 			}
 		}
 	}
@@ -150,13 +128,14 @@ func handleGetModels(c *gin.Context) {
 	}
 
 	// Add serverless deployments to the models list
-	for deploymentName := range azure.ServerlessDeploymentKeys {
+	for deploymentName, info := range azure.ServerlessDeploymentInfo {
 		models = append(models, Model{
 			ID:     deploymentName,
 			Object: "model",
 			Capabilities: Capabilities{
 				Completion:     true,
 				ChatCompletion: true,
+				Inference:      true,
 			},
 			LifecycleStatus: "active",
 			Status:          "ready",
