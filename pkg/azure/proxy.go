@@ -50,8 +50,8 @@ var (
 		"text-embedding-3-large":      "text-embedding-3-large-1",
 	}
 	AzureAIStudioDeployments = make(map[string]string)
-	ServerlessDeploymentInfo = make(map[string]ServerlessDeployment)
 	fallbackModelMapper      = regexp.MustCompile(`[.:]`)
+	ServerlessDeploymentInfo = make(map[string]ServerlessDeployment)
 )
 
 type ServerlessDeployment struct {
@@ -76,18 +76,16 @@ func init() {
 			if len(info) == 2 {
 				deploymentInfo := strings.Split(info[1], ":")
 				if len(deploymentInfo) == 2 {
-					AzureAIStudioDeployments[info[0]] = deploymentInfo[0]
-					ServerlessDeploymentInfo[strings.ToLower(info[0])] = ServerlessDeployment{
+					ServerlessDeploymentInfo[info[0]] = ServerlessDeployment{
 						Name:   deploymentInfo[0],
 						Region: deploymentInfo[1],
 						Key:    os.Getenv("AZURE_OPENAI_KEY_" + strings.ToUpper(info[0])),
 					}
 				}
-			} else {
-				log.Printf("error parsing AZURE_AI_STUDIO_DEPLOYMENTS, invalid value %s", pair)
 			}
 		}
 	}
+	log.Printf("Loaded ServerlessDeploymentInfo: %+v", ServerlessDeploymentInfo)
 
 	if v := os.Getenv("AZURE_OPENAI_TOKEN"); v != "" {
 		AzureOpenAIToken = v
@@ -105,35 +103,34 @@ func init() {
 	log.Printf("Loaded %d serverless deployment infos", len(ServerlessDeploymentInfo))
 }
 
-func HandleToken(req *http.Request) {
+func HandleToken(req *http.Request) string {
 	deployment := extractDeploymentFromPath(req.URL.Path)
 
 	// First, try an exact match
 	if info, ok := ServerlessDeploymentInfo[deployment]; ok {
-		setServerlessAuth(req, info, deployment)
-		return
+		return setServerlessAuth(req, info, deployment)
 	}
 
 	// If no exact match, try case-insensitive match
 	for key, info := range ServerlessDeploymentInfo {
 		if strings.EqualFold(key, deployment) {
-			setServerlessAuth(req, info, deployment)
-			return
+			return setServerlessAuth(req, info, deployment)
 		}
 	}
 
 	// If no serverless match, proceed with regular Azure OpenAI authentication
-	handleRegularAuth(req, deployment)
+	return handleRegularAuth(req, deployment)
 }
 
-func setServerlessAuth(req *http.Request, info ServerlessDeployment, deployment string) {
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+func setServerlessAuth(req *http.Request, info ServerlessDeployment, deployment string) string {
+	token := fmt.Sprintf("Bearer %s", info.Key)
+	req.Header.Set("Authorization", token)
 	req.Header.Del("api-key")
 	log.Printf("Using serverless deployment authentication for %s", deployment)
+	return deployment // Return the actual deployment name
 }
 
-func handleRegularAuth(req *http.Request, deployment string) {
-	// Existing code for regular Azure OpenAI authentication
+func handleRegularAuth(req *http.Request, deployment string) string {
 	var token string
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
 		token = apiKey
@@ -152,6 +149,7 @@ func handleRegularAuth(req *http.Request, deployment string) {
 	} else {
 		log.Printf("Warning: No authentication token found for deployment: %s", deployment)
 	}
+	return deployment
 }
 
 func handleModelMapper() {
@@ -226,13 +224,11 @@ func extractDeploymentFromPath(path string) string {
 func makeDirector(remote *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
 		model := getModelFromRequest(req)
-		deployment := GetDeploymentByModel(model)
-
-		HandleToken(req)
+		deployment := HandleToken(req) // This now returns the actual deployment name
 
 		originURL := req.URL.String()
 
-		if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
+		if info, ok := ServerlessDeploymentInfo[deployment]; ok {
 			req.URL.Scheme = "https"
 			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
 			req.Host = req.URL.Host
@@ -290,7 +286,8 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
+		log.Printf("Final request URL: %s", req.URL.String())
+		log.Printf("Final request headers: %v", req.Header)
 	}
 }
 
