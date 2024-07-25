@@ -108,14 +108,13 @@ func init() {
 func HandleToken(req *http.Request) {
 	deployment := extractDeploymentFromPath(req.URL.Path)
 
-	// Check if it's a serverless deployment
 	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
 		req.Header.Del("api-key")
+		log.Printf("Using serverless deployment authentication for %s", deployment)
 		return
 	}
 
-	// Existing token handling logic for non-serverless deployments
 	var token string
 
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
@@ -131,8 +130,9 @@ func HandleToken(req *http.Request) {
 	if token != "" {
 		req.Header.Set("api-key", token)
 		req.Header.Del("Authorization")
+		log.Printf("Using regular Azure OpenAI authentication for %s", deployment)
 	} else {
-		log.Println("Warning: No authentication token found for deployment:", deployment)
+		log.Printf("Warning: No authentication token found for deployment: %s", deployment)
 	}
 }
 
