@@ -105,11 +105,46 @@ func init() {
 	log.Printf("Loaded %d serverless deployment infos", len(ServerlessDeploymentInfo))
 }
 
-func HandleToken(req *http.Request) {
-	deployment := extractDeploymentFromPath(req.URL.Path)
+func proxyRequest(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+
+	req, err := http.NewRequest("POST", "https://Mistral-large2.swedencentral.models.ai.azure.com/v1/chat/completions", strings.NewReader(string(body)))
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	// Forward headers from the original request
+	for name, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
+
+	handleToken(req, r.URL.Path)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to make request", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(resp.Sta// Removed duplicate function declarationctDeploymentFromPath(path)
 
 	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+		req.Header.Set("Authorization", "Bearer "+info.Key)
 		req.Header.Del("api-key")
 		log.Printf("Using serverless deployment authentication for %s", deployment)
 		return
@@ -134,6 +169,16 @@ func HandleToken(req *http.Request) {
 	} else {
 		log.Printf("Warning: No authentication token found for deployment: %s", deployment)
 	}
+}
+
+func extractDeploymentFromPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "deployments" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
 }
 
 func handleModelMapper() {
