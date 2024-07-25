@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -106,54 +105,11 @@ func init() {
 	log.Printf("Loaded %d serverless deployment infos", len(ServerlessDeploymentInfo))
 }
 
-func proxyRequest(w http.ResponseWriter, r *http.Request) {
-	client := &http.Client{}
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-		return
-	}
-
-	req, err := http.NewRequest("POST", "https://Mistral-large2.swedencentral.models.ai.azure.com/v1/chat/completions", strings.NewReader(string(body)))
-	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
-		return
-	}
-
-	// Forward headers from the original request
-	for name, values := range r.Header {
-		for _, value := range values {
-			req.Header.Add(name, value)
-		}
-	}
-
-	handleToken(req, r.URL.Path)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, "Failed to make request", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(resp.StatusCode)
-	_, err = w.Write(respBody)
-	if err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
-	}
-}
-
-func handleToken(req *http.Request, path string) {
-	deployment := extractDeploymentFromPath(path)
+func HandleToken(req *http.Request) {
+	deployment := extractDeploymentFromPath(req.URL.Path)
 
 	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
-		req.Header.Set("Authorization", "Bearer "+info.Key)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
 		req.Header.Del("api-key")
 		log.Printf("Using serverless deployment authentication for %s", deployment)
 		return
@@ -178,16 +134,6 @@ func handleToken(req *http.Request, path string) {
 	} else {
 		log.Printf("Warning: No authentication token found for deployment: %s", deployment)
 	}
-}
-
-func extractDeploymentFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		if part == "deployments" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-	return ""
 }
 
 func handleModelMapper() {
@@ -249,12 +195,22 @@ func sanitizeHeaders(headers http.Header) http.Header {
 	return sanitized
 }
 
+func extractDeploymentFromPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "deployments" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
 func makeDirector(remote *url.URL) func(*http.Request) {
 	return func(req *http.Request) {
 		model := getModelFromRequest(req)
 		deployment := GetDeploymentByModel(model)
 
-		handleToken(req, req.URL.Path)
+		HandleToken(req)
 
 		originURL := req.URL.String()
 
@@ -262,7 +218,7 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.URL.Scheme = "https"
 			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
 			req.Host = req.URL.Host
-			// For serverless, keep the original path with '/v1' prefix
+			// For serverless, keep the original path
 			log.Printf("Using serverless deployment for %s", deployment)
 		} else {
 			req.Host = remote.Host
@@ -327,7 +283,6 @@ func modifyResponse(res *http.Response) error {
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 
-	// Handle streaming responses
 	if res.Header.Get("Content-Type") == "text/event-stream" {
 		res.Header.Set("X-Accel-Buffering", "no")
 	}
