@@ -227,6 +227,7 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 		deployment := HandleToken(req) // This now returns the actual deployment name
 
 		originURL := req.URL.String()
+		log.Printf("Original request URL: %s for model: %s", originURL, model)
 
 		if info, ok := ServerlessDeploymentInfo[deployment]; ok {
 			req.URL.Scheme = "https"
@@ -286,8 +287,8 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		log.Printf("Final request URL: %s", req.URL.String())
-		log.Printf("Final request headers: %v", req.Header)
+		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
+		log.Printf("Final request headers: %v", sanitizeHeaders(req.Header))
 	}
 }
 
