@@ -94,11 +94,43 @@ func NewOpenAIReverseProxy() *httputil.ReverseProxy {
 	}
 }
 
+func HandleToken(req *http.Request) {
+	model := getModelFromRequest(req)
+	modelLower := strings.ToLower(model)
+
+	// Check if it's a serverless deployment
+	if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
+		// Set the correct authorization header for serverless
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+		req.Header.Del("api-key")
+		log.Printf("Using serverless deployment authentication for %s", model)
+	} else {
+		// For regular Azure OpenAI deployments, use the api-key
+		apiKey := req.Header.Get("api-key")
+		if apiKey == "" {
+			apiKey = req.Header.Get("Authorization")
+			if strings.HasPrefix(apiKey, "Bearer ") {
+				apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+			}
+		}
+		if apiKey == "" {
+			log.Printf("Warning: No api-key or Authorization header found for deployment: %s", model)
+		} else {
+			req.Header.Set("api-key", apiKey)
+			req.Header.Del("Authorization")
+			log.Printf("Using regular Azure OpenAI authentication for %s", model)
+		}
+	}
+}
+
 func makeDirector() func(*http.Request) {
 	return func(req *http.Request) {
 		model := getModelFromRequest(req)
 		originURL := req.URL.String()
 		log.Printf("Original request URL: %s for model: %s", originURL, model)
+
+		// Handle the token
+		HandleToken(req)
 
 		// Convert model to lowercase for case-insensitive matching
 		modelLower := strings.ToLower(model)
