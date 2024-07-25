@@ -214,8 +214,10 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 
 		originURL := req.URL.String()
 
+		isServerless := false
 		// Check if it's a serverless deployment
 		if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
+			isServerless = true
 			req.URL.Scheme = "https"
 			req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
 			req.Host = req.URL.Host
@@ -269,9 +271,12 @@ func makeDirector(remote *url.URL) func(*http.Request) {
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		query := req.URL.Query()
-		query.Add("api-version", AzureOpenAIAPIVersion)
-		req.URL.RawQuery = query.Encode()
+		// Only add api-version for non-serverless deployments
+		if !isServerless {
+			query := req.URL.Query()
+			query.Add("api-version", AzureOpenAIAPIVersion)
+			req.URL.RawQuery = query.Encode()
+		}
 
 		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
 	}
