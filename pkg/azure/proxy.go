@@ -110,12 +110,12 @@ func HandleToken(req *http.Request) {
 
 	// Check if it's a serverless deployment
 	if info, ok := ServerlessDeploymentInfo[strings.ToLower(deployment)]; ok {
-		req.Header.Set("api-key", info.Key)
-		req.Header.Del("Authorization")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
+		req.Header.Del("api-key")
 		return
 	}
 
-	// Existing token handling logic
+	// Existing token handling logic for non-serverless deployments
 	var token string
 
 	if apiKey := req.Header.Get("api-key"); apiKey != "" {
