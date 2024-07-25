@@ -146,7 +146,7 @@ func makeDirector() func(*http.Request) {
 		}
 
 		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		log.Printf("Final request headers: %v", sanitizeHeaders(req.Header))
+		// log.Printf("Final request headers: %v", sanitizeHeaders(req.Header))
 	}
 }
 
