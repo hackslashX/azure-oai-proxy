@@ -184,11 +184,12 @@ func handleRegularRequest(req *http.Request, deployment string) {
 		req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
 	case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
 		req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
+	case strings.HasPrefix(req.URL.Path, "/v1/audio/transcriptions"):
+		req.URL.Path = path.Join("/openai/deployments", AzureOpenAIModelMapper["whisper-1"], "audio/translations")
 	// Add other cases as needed
 	default:
 		req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
 	}
-
 	// Add api-version query parameter
 	query := req.URL.Query()
 	query.Add("api-version", AzureOpenAIAPIVersion)
