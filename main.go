@@ -164,7 +164,10 @@ func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
 		endpoint = azure.AzureOpenAIEndpoint
 	}
 
-	url := fmt.Sprintf("%s/openai/models?api-version=%s", endpoint, azure.AzureOpenAIAPIVersion)
+	// Use the separate models API version
+	modelsAPIVersion := azure.AzureOpenAIModelsAPIVersion
+	url := fmt.Sprintf("%s/openai/models?api-version=%s", endpoint, modelsAPIVersion)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -207,16 +210,13 @@ func handleAzureProxy(c *gin.Context) {
 		handleOptions(c)
 		return
 	}
-
 	server := azure.NewOpenAIReverseProxy()
 	server.ServeHTTP(c.Writer, c.Request)
-
 	if c.Writer.Header().Get("Content-Type") == "text/event-stream" {
 		if _, err := c.Writer.Write([]byte("\n")); err != nil {
 			log.Printf("rewrite azure response error: %v", err)
 		}
 	}
-
 	// Enhanced error logging
 	if c.Writer.Status() >= 400 {
 		log.Printf("Azure API request failed: %s %s, Status: %d", c.Request.Method, c.Request.URL.Path, c.Writer.Status())

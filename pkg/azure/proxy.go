@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	AzureOpenAIAPIVersion    = "2024-06-01"
-	AzureOpenAIEndpoint      = ""
-	ServerlessDeploymentInfo = make(map[string]ServerlessDeployment)
-	AzureOpenAIModelMapper   = make(map[string]string)
+	AzureOpenAIAPIVersion       = "2024-12-01-preview" // API version for proxying requests
+	AzureOpenAIModelsAPIVersion = "2024-10-21"         // API version for fetching models
+	AzureOpenAIEndpoint         = ""
+	ServerlessDeploymentInfo    = make(map[string]ServerlessDeployment)
+	AzureOpenAIModelMapper      = make(map[string]string)
 )
 
 type ServerlessDeployment struct {
@@ -31,6 +32,9 @@ type ServerlessDeployment struct {
 func init() {
 	if v := os.Getenv("AZURE_OPENAI_APIVERSION"); v != "" {
 		AzureOpenAIAPIVersion = v
+	}
+	if v := os.Getenv("AZURE_OPENAI_MODELS_APIVERSION"); v != "" {
+		AzureOpenAIModelsAPIVersion = v
 	}
 	if v := os.Getenv("AZURE_OPENAI_ENDPOINT"); v != "" {
 		AzureOpenAIEndpoint = v
@@ -52,39 +56,57 @@ func init() {
 		}
 	}
 
-	// Initialize AzureOpenAIModelMapper (you might want to load this from an environment variable or config file)
+	// Initialize AzureOpenAIModelMapper with updated model list and hardcode as failsafe
 	AzureOpenAIModelMapper = map[string]string{
-		"gpt-3.5-turbo":               "gpt-35-turbo",
-		"gpt-3.5-turbo-0125":          "gpt-35-turbo-0125",
-		"gpt-3.5-turbo-0613":          "gpt-35-turbo-0613",
-		"gpt-3.5-turbo-1106":          "gpt-35-turbo-1106",
-		"gpt-3.5-turbo-16k-0613":      "gpt-35-turbo-16k-0613",
-		"gpt-3.5-turbo-instruct-0914": "gpt-35-turbo-instruct-0914",
-		"gpt-4":                       "gpt-4-0613",
-		"gpt-4-32k":                   "gpt-4-32k",
-		"gpt-4-32k-0613":              "gpt-4-32k-0613",
+		"o1-preview":                  "o1-preview",
+		"o1-mini-2024-09-12":          "o1-mini-2024-09-12",
 		"gpt-4o":                      "gpt-4o",
-		"gpt-4o-mini":                 "gpt-4o-mini",
 		"gpt-4o-2024-05-13":           "gpt-4o-2024-05-13",
-		"gpt-4-turbo":                 "gpt-4-turbo",
+		"gpt-4o-2024-08-06":           "gpt-4o-2024-08-06",
+		"gpt-4o-mini":                 "gpt-4o-mini",
+		"gpt-4o-mini-2024-07-18":      "gpt-4o-mini-2024-07-18",
+		"gpt-4":                       "gpt-4-0613",
+		"gpt-4-0613":                  "gpt-4-0613",
+		"gpt-4-1106-preview":          "gpt-4-1106-preview",
+		"gpt-4-0125-preview":          "gpt-4-0125-preview",
 		"gpt-4-vision-preview":        "gpt-4-vision-preview",
 		"gpt-4-turbo-2024-04-09":      "gpt-4-turbo-2024-04-09",
-		"gpt-4-1106-preview":          "gpt-4-1106-preview",
-		"text-embedding-ada-002":      "text-embedding-ada-002",
-		"dall-e-2":                    "dall-e-2",
-		"dall-e-3":                    "dall-e-3",
-		"babbage-002":                 "babbage-002",
-		"davinci-002":                 "davinci-002",
-		"whisper-1":                   "whisper",
-		"tts-1":                       "tts",
-		"tts-1-hd":                    "tts-hd",
+		"gpt-4-32k":                   "gpt-4-32k-0613",
+		"gpt-4-32k-0613":              "gpt-4-32k-0613",
+		"gpt-3.5-turbo":               "gpt-35-turbo-0613",
+		"gpt-3.5-turbo-0301":          "gpt-35-turbo-0301",
+		"gpt-3.5-turbo-0613":          "gpt-35-turbo-0613",
+		"gpt-3.5-turbo-1106":          "gpt-35-turbo-1106",
+		"gpt-3.5-turbo-0125":          "gpt-35-turbo-0125",
+		"gpt-3.5-turbo-16k":           "gpt-35-turbo-16k-0613",
+		"gpt-3.5-turbo-16k-0613":      "gpt-35-turbo-16k-0613",
+		"gpt-3.5-turbo-instruct":      "gpt-35-turbo-instruct-0914",
+		"gpt-3.5-turbo-instruct-0914": "gpt-35-turbo-instruct-0914",
 		"text-embedding-3-small":      "text-embedding-3-small-1",
 		"text-embedding-3-large":      "text-embedding-3-large-1",
+		"text-embedding-ada-002":      "text-embedding-ada-002-2",
+		"text-embedding-ada-002-1":    "text-embedding-ada-002-1",
+		"text-embedding-ada-002-2":    "text-embedding-ada-002-2",
+		"dall-e-2":                    "dall-e-2-2.0",
+		"dall-e-2-2.0":                "dall-e-2-2.0",
+		"dall-e-3":                    "dall-e-3-3.0",
+		"dall-e-3-3.0":                "dall-e-3-3.0",
+		"babbage-002":                 "babbage-002-1",
+		"babbage-002-1":               "babbage-002-1",
+		"davinci-002":                 "davinci-002-1",
+		"davinci-002-1":               "davinci-002-1",
+		"tts":                         "tts-001",
+		"tts-001":                     "tts-001",
+		"tts-hd":                      "tts-hd-001",
+		"tts-hd-001":                  "tts-hd-001",
+		"whisper":                     "whisper-001",
+		"whisper-001":                 "whisper-001",
 	}
 
 	log.Printf("Loaded ServerlessDeploymentInfo: %+v", ServerlessDeploymentInfo)
 	log.Printf("Azure OpenAI Endpoint: %s", AzureOpenAIEndpoint)
 	log.Printf("Azure OpenAI API Version: %s", AzureOpenAIAPIVersion)
+	log.Printf("Azure OpenAI Models API Version: %s", AzureOpenAIModelsAPIVersion)
 }
 
 func NewOpenAIReverseProxy() *httputil.ReverseProxy {
@@ -97,7 +119,6 @@ func NewOpenAIReverseProxy() *httputil.ReverseProxy {
 func HandleToken(req *http.Request) {
 	model := getModelFromRequest(req)
 	modelLower := strings.ToLower(model)
-
 	// Check if it's a serverless deployment
 	if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
 		// Set the correct authorization header for serverless
@@ -153,9 +174,7 @@ func makeDirector() func(*http.Request) {
 func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model string) {
 	req.URL.Scheme = "https"
 	req.URL.Host = fmt.Sprintf("%s.%s.models.ai.azure.com", info.Name, info.Region)
-	req.Host = req.URL.Host
-
-	// Preserve query parameters from the original request
+	req.Host = req.URL.Host // Preserve query parameters from the original request
 	originalQuery := req.URL.Query()
 	for key, values := range originalQuery {
 		for _, value := range values {
@@ -166,7 +185,6 @@ func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model
 	// Set the correct authorization header for serverless
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", info.Key))
 	req.Header.Del("api-key")
-
 	log.Printf("Using serverless deployment for %s", model)
 }
 
@@ -184,7 +202,7 @@ func handleRegularRequest(req *http.Request, deployment string) {
 		req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
 	case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
 		req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
-	// Add other cases as needed
+		// Add other cases as needed
 	default:
 		req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
 	}
@@ -199,7 +217,6 @@ func handleRegularRequest(req *http.Request, deployment string) {
 	if apiKey == "" {
 		log.Printf("Warning: No api-key found for regular deployment: %s", deployment)
 	}
-
 	log.Printf("Using regular Azure OpenAI deployment for %s", deployment)
 }
 
@@ -244,10 +261,8 @@ func modifyResponse(res *http.Response) error {
 		log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
-
 	if res.Header.Get("Content-Type") == "text/event-stream" {
 		res.Header.Set("X-Accel-Buffering", "no")
 	}
-
 	return nil
 }
