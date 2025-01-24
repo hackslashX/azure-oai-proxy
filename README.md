@@ -235,7 +235,7 @@ For custom fine-tuned models, the model name can be passed directly. For models 
 -   Monitor your Azure OpenAI usage and costs, especially when using this proxy in high-traffic scenarios.
 
 ## Recently Updated
-
+-   2025-01-24 Added support for Azure OpenAI API version 2024-12-01-preview and new model fetching mechanism.
 -   2024-07-25 Implemented support for Azure AI Studio deployments with support for Meta LLama 3.1, Mistral-2407 (mistral large 2), and other open models including from Cohere AI.
 -   2024-07-25 Added a dedicated API version configuration (`AZURE_OPENAI_MODELS_APIVERSION`) for fetching models, ensuring compatibility.
 -   2024-07-18 Added support for `gpt-4o-mini`.
