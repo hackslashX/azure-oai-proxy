@@ -95,6 +95,8 @@ func main() {
 		router.GET("/v1/audio/voices", handleAzureProxy)
 		router.POST("/v1/audio/transcriptions", handleAzureProxy)
 		router.POST("/v1/audio/translations", handleAzureProxy)
+		// Responses route
+		router.POST("/v1/responses", handleAzureProxy)
 		// Fine-tuning routes
 		router.POST("/v1/fine_tunes", handleAzureProxy)
 		router.GET("/v1/fine_tunes", handleAzureProxy)

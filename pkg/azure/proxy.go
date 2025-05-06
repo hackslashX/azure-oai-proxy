@@ -2,6 +2,7 @@ package azure
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -188,7 +189,68 @@ func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model
 	log.Printf("Using serverless deployment for %s", model)
 }
 
+func handleResponsesRequest(req *http.Request) {
+	remote, _ := url.Parse(AzureOpenAIEndpoint)
+	req.URL.Scheme = remote.Scheme
+	req.URL.Host = remote.Host
+	req.Host = remote.Host
+
+	// Set the path for responses endpoint
+	req.URL.Path = "/openai/responses"
+
+	// Add api-version query parameter
+	query := req.URL.Query()
+	query.Set("api-version", AzureOpenAIAPIVersion)
+	req.URL.RawQuery = query.Encode()
+
+	// Convert model name using the mapper if needed
+	if req.Body != nil {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			log.Printf("Error reading request body: %v", err)
+			return
+		}
+		req.Body = io.NopCloser(bytes.NewBuffer(body))
+
+		// Parse the JSON body
+		var jsonBody map[string]interface{}
+		if err := json.Unmarshal(body, &jsonBody); err != nil {
+			log.Printf("Error parsing JSON body: %v", err)
+			return
+		}
+
+		// Get and convert the model name
+		if model, ok := jsonBody["model"].(string); ok {
+			if azureModel, ok := AzureOpenAIModelMapper[strings.ToLower(model)]; ok {
+				jsonBody["model"] = azureModel
+				// Marshal back to JSON
+				newBody, err := json.Marshal(jsonBody)
+				if err != nil {
+					log.Printf("Error marshaling JSON body: %v", err)
+					return
+				}
+				req.Body = io.NopCloser(bytes.NewBuffer(newBody))
+				// Update Content-Length header
+				req.ContentLength = int64(len(newBody))
+			}
+		}
+	}
+
+	// Use the api-key from the original request
+	apiKey := req.Header.Get("api-key")
+	if apiKey == "" {
+		log.Printf("Warning: No api-key found for responses endpoint")
+	}
+	log.Printf("Using responses endpoint with API version: %s", AzureOpenAIModelsAPIVersion)
+}
+
 func handleRegularRequest(req *http.Request, deployment string) {
+	// Handle responses endpoint separately
+	if strings.HasPrefix(req.URL.Path, "/v1/responses") {
+		handleResponsesRequest(req)
+		return
+	}
+
 	remote, _ := url.Parse(AzureOpenAIEndpoint)
 	req.URL.Scheme = remote.Scheme
 	req.URL.Host = remote.Host
@@ -207,7 +269,7 @@ func handleRegularRequest(req *http.Request, deployment string) {
 		req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
 	}
 
-	// Add api-version query parameter
+	// Add api-version query parameter for other endpoints
 	query := req.URL.Query()
 	query.Add("api-version", AzureOpenAIAPIVersion)
 	req.URL.RawQuery = query.Encode()

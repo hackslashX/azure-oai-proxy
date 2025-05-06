@@ -61,6 +61,7 @@ The latest version of the Azure OpenAI service supports the following APIs:
 | /v1/audio/transcriptions            | ✅     |
 | /v1/audio/translations             | ✅     |
 | /v1/models/:model_id/capabilities | ✅     |
+| /v1/responses                      | ✅     |
 
 ## Configuration
 
