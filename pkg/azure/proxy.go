@@ -295,13 +295,18 @@ func sanitizeHeaders(headers http.Header) http.Header {
 }
 
 func modifyResponse(res *http.Response) error {
-	if res.StatusCode >= 400 {
-		body, _ := io.ReadAll(res.Body)
-		log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
-		res.Body = io.NopCloser(bytes.NewBuffer(body))
-	}
-	if res.Header.Get("Content-Type") == "text/event-stream" {
-		res.Header.Set("X-Accel-Buffering", "no")
-	}
-	return nil
+    if res.StatusCode >= 400 {
+        body, _ := io.ReadAll(res.Body)
+        log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
+        res.Body = io.NopCloser(bytes.NewBuffer(body))
+    }
+    
+    // Handle streaming for both regular SSE and Responses API
+    if res.Header.Get("Content-Type") == "text/event-stream" {
+        res.Header.Set("X-Accel-Buffering", "no")
+        res.Header.Set("Cache-Control", "no-cache")
+        res.Header.Set("Connection", "keep-alive")
+    }
+    
+    return nil
 }
