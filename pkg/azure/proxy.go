@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	AzureOpenAIAPIVersion       = "2024-12-01-preview" // API version for proxying requests
+	AzureOpenAIAPIVersion       = "2025-04-01-preview" // API version for proxying requests
 	AzureOpenAIModelsAPIVersion = "2024-10-21"         // API version for fetching models
 	AzureOpenAIResponsesAPIVersion = "preview"           // API version for Responses API
 	AzureOpenAIEndpoint         = ""
