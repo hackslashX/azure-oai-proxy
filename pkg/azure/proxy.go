@@ -346,34 +346,42 @@ func convertChatToResponses(req *http.Request) {
     if req.Body != nil {
         body, _ := io.ReadAll(req.Body)
         
+        log.Printf("Original chat completion request: %s", string(body))
+        
         // Parse the chat completion request
         messages := gjson.GetBytes(body, "messages").Array()
         temperature := gjson.GetBytes(body, "temperature").Float()
         maxTokens := gjson.GetBytes(body, "max_tokens").Int()
         stream := gjson.GetBytes(body, "stream").Bool()
         
-        // Convert messages to input format for Responses API
-        var input []map[string]interface{}
-        for _, msg := range messages {
-            role := msg.Get("role").String()
-            content := msg.Get("content").String()
-            
-            inputMsg := map[string]interface{}{
-                "role": role,
-                "content": []map[string]interface{}{
-                    {
-                        "type": "input_text",
-                        "text": content,
-                    },
-                },
-            }
-            input = append(input, inputMsg)
-        }
-        
         // Create new request body for Responses API
         newBody := map[string]interface{}{
             "model": gjson.GetBytes(body, "model").String(),
-            "input": input,
+        }
+        
+        // For simple requests, we can use a string input
+        if len(messages) == 1 && messages[0].Get("role").String() == "user" {
+            // Use simple string input for single user message
+            newBody["input"] = messages[0].Get("content").String()
+        } else {
+            // Convert messages to input format for Responses API
+            var input []map[string]interface{}
+            for _, msg := range messages {
+                role := msg.Get("role").String()
+                content := msg.Get("content").String()
+                
+                inputMsg := map[string]interface{}{
+                    "role": role,
+                    "content": []map[string]interface{}{
+                        {
+                            "type": "input_text",
+                            "text": content,
+                        },
+                    },
+                }
+                input = append(input, inputMsg)
+            }
+            newBody["input"] = input
         }
         
         if temperature > 0 {
@@ -388,36 +396,112 @@ func convertChatToResponses(req *http.Request) {
         
         // Marshal the new body
         newBodyBytes, _ := json.Marshal(newBody)
+        
+        log.Printf("Converted to Responses API request: %s", string(newBodyBytes))
+        
         req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
         req.ContentLength = int64(len(newBodyBytes))
         
         // Update the path to use responses endpoint
         req.URL.Path = "/v1/responses"
-		req.Header.Set("X-Original-Path", "/v1/chat/completions")
+        req.Header.Set("X-Original-Path", "/v1/chat/completions")
     }
 }
 
 // Add function to convert Responses API response to chat completion format
 func convertResponsesToChatCompletion(res *http.Response) {
-    body, _ := io.ReadAll(res.Body)
+    body, err := io.ReadAll(res.Body)
+    if err != nil {
+        log.Printf("Error reading response body: %v", err)
+        return
+    }
+    
+    // Log the raw response for debugging
+    log.Printf("Raw Responses API response: %s", string(body))
     
     var responseData map[string]interface{}
-    json.Unmarshal(body, &responseData)
+    if err := json.Unmarshal(body, &responseData); err != nil {
+        log.Printf("Error unmarshaling response: %v", err)
+        res.Body = io.NopCloser(bytes.NewBuffer(body))
+        return
+    }
     
-    // Extract the output
-    outputs := responseData["output"].([]interface{})
-    var content string
+    // Check if it's a streaming response
+    if res.Header.Get("Content-Type") == "text/event-stream" {
+        // For streaming, we need to handle it differently
+        res.Body = io.NopCloser(bytes.NewBuffer(body))
+        return
+    }
     
-    for _, output := range outputs {
-        outputMap := output.(map[string]interface{})
-        if outputMap["type"] == "message" && outputMap["role"] == "assistant" {
-            contents := outputMap["content"].([]interface{})
-            for _, c := range contents {
-                contentMap := c.(map[string]interface{})
-                if contentMap["type"] == "output_text" {
-                    content = contentMap["text"].(string)
-                    break
+    // Check if there's an error
+    if errorData, ok := responseData["error"]; ok && errorData != nil {
+        // Return the error as-is
+        res.Body = io.NopCloser(bytes.NewBuffer(body))
+        return
+    }
+    
+    // Extract the content - the Responses API has output_text at the root level
+    content := ""
+    if outputText, ok := responseData["output_text"].(string); ok {
+        content = outputText
+    } else {
+        // Fallback to extracting from output array if output_text is not present
+        if outputsRaw, ok := responseData["output"]; ok && outputsRaw != nil {
+            outputs, ok := outputsRaw.([]interface{})
+            if ok {
+                for _, output := range outputs {
+                    outputMap, ok := output.(map[string]interface{})
+                    if !ok {
+                        continue
+                    }
+                    
+                    if outputMap["type"] == "message" && outputMap["role"] == "assistant" {
+                        if contentsRaw, ok := outputMap["content"]; ok && contentsRaw != nil {
+                            contents, ok := contentsRaw.([]interface{})
+                            if ok {
+                                for _, c := range contents {
+                                    contentMap, ok := c.(map[string]interface{})
+                                    if !ok {
+                                        continue
+                                    }
+                                    if contentMap["type"] == "output_text" {
+                                        if text, ok := contentMap["text"].(string); ok {
+                                            content = text
+                                            break
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+    
+    // Determine finish reason
+    finishReason := "stop"
+    if status, ok := responseData["status"].(string); ok && status != "completed" {
+        finishReason = status
+    }
+    
+    // Extract usage data safely
+    usage := map[string]interface{}{
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    
+    if usageRaw, ok := responseData["usage"]; ok && usageRaw != nil {
+        if usageMap, ok := usageRaw.(map[string]interface{}); ok {
+            if inputTokens, ok := usageMap["input_tokens"].(float64); ok {
+                usage["prompt_tokens"] = int(inputTokens)
+            }
+            if outputTokens, ok := usageMap["output_tokens"].(float64); ok {
+                usage["completion_tokens"] = int(outputTokens)
+            }
+            if totalTokens, ok := usageMap["total_tokens"].(float64); ok {
+                usage["total_tokens"] = int(totalTokens)
             }
         }
     }
@@ -426,7 +510,7 @@ func convertResponsesToChatCompletion(res *http.Response) {
     chatResponse := map[string]interface{}{
         "id": responseData["id"],
         "object": "chat.completion",
-        "created": int64(responseData["created_at"].(float64)),
+        "created": int64(getFloat64(responseData["created_at"])),
         "model": responseData["model"],
         "choices": []map[string]interface{}{
             {
@@ -435,10 +519,10 @@ func convertResponsesToChatCompletion(res *http.Response) {
                     "role": "assistant",
                     "content": content,
                 },
-                "finish_reason": "stop",
+                "finish_reason": finishReason,
             },
         },
-        "usage": responseData["usage"],
+        "usage": usage,
     }
     
     // Marshal and set as new body
@@ -446,4 +530,18 @@ func convertResponsesToChatCompletion(res *http.Response) {
     res.Body = io.NopCloser(bytes.NewBuffer(newBody))
     res.ContentLength = int64(len(newBody))
     res.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBody)))
+}
+
+// Helper function to safely get float64
+func getFloat64(v interface{}) float64 {
+    switch val := v.(type) {
+    case float64:
+        return val
+    case int64:
+        return float64(val)
+    case int:
+        return float64(val)
+    default:
+        return 0
+    }
 }
