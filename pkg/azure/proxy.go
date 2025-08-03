@@ -302,24 +302,53 @@ func sanitizeHeaders(headers http.Header) http.Header {
 }
 
 func modifyResponse(res *http.Response) error {
-    // Check if this is a Responses API response that needs conversion
-    if res.Request.URL.Path == "/openai/v1/responses" && res.StatusCode == 200 {
+    // Check if this is a streaming response that needs conversion
+    if res.Header.Get("Content-Type") == "text/event-stream" {
+        res.Header.Set("X-Accel-Buffering", "no")
+        res.Header.Set("Cache-Control", "no-cache")
+        res.Header.Set("Connection", "keep-alive")
+        
+        // Check if this needs streaming conversion
+        if origPath := res.Request.Header.Get("X-Original-Path"); origPath == "/v1/chat/completions" {
+            // Get the model from the request
+            model := res.Request.Header.Get("X-Model")
+            if model == "" {
+                model = "unknown"
+            }
+            
+            // Create a pipe for the conversion
+            pr, pw := io.Pipe()
+            
+            // Start the conversion in a goroutine
+            go func() {
+                defer pw.Close()
+                defer res.Body.Close()
+                
+                converter := NewStreamingResponseConverter(res.Body, pw, model)
+                if err := converter.Convert(); err != nil {
+                    log.Printf("Streaming conversion error: %v", err)
+                }
+            }()
+            
+            // Replace the response body
+            res.Body = pr
+        }
+        
+        return nil
+    }
+    
+    // Handle non-streaming responses
+    if strings.Contains(res.Request.URL.Path, "/openai/v1/responses") && res.StatusCode == 200 {
         // Check if the original request was for chat completions
         if origPath := res.Request.Header.Get("X-Original-Path"); origPath == "/v1/chat/completions" {
             convertResponsesToChatCompletion(res)
         }
     }
-
+    
     if res.StatusCode >= 400 {
         body, _ := io.ReadAll(res.Body)
         log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
         res.Body = io.NopCloser(bytes.NewBuffer(body))
-    }
-    
-    if res.Header.Get("Content-Type") == "text/event-stream" {
-        res.Header.Set("X-Accel-Buffering", "no")
-        res.Header.Set("Cache-Control", "no-cache")
-        res.Header.Set("Connection", "keep-alive")
     }
     
     return nil
@@ -349,6 +378,7 @@ func convertChatToResponses(req *http.Request) {
         log.Printf("Original chat completion request: %s", string(body))
         
         // Parse the chat completion request
+        model := gjson.GetBytes(body, "model").String()
         messages := gjson.GetBytes(body, "messages").Array()
         temperature := gjson.GetBytes(body, "temperature").Float()
         maxTokens := gjson.GetBytes(body, "max_tokens").Int()
@@ -356,7 +386,7 @@ func convertChatToResponses(req *http.Request) {
         
         // Create new request body for Responses API
         newBody := map[string]interface{}{
-            "model": gjson.GetBytes(body, "model").String(),
+            "model": model,
         }
         
         // For simple requests, we can use a string input
@@ -405,10 +435,11 @@ func convertChatToResponses(req *http.Request) {
         // Update the path to use responses endpoint
         req.URL.Path = "/v1/responses"
         req.Header.Set("X-Original-Path", "/v1/chat/completions")
+        req.Header.Set("X-Model", model) // Store model for streaming response
     }
 }
 
-// Add function to convert Responses API response to chat completion format
+// convert Responses API response to chat completion format
 func convertResponsesToChatCompletion(res *http.Response) {
     body, err := io.ReadAll(res.Body)
     if err != nil {
