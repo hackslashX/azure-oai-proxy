@@ -393,6 +393,7 @@ func convertChatToResponses(req *http.Request) {
         
         // Update the path to use responses endpoint
         req.URL.Path = "/v1/responses"
+		req.Header.Set("X-Original-Path", "/v1/chat/completions")
     }
 }
 
