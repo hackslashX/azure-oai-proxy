@@ -1,15 +1,15 @@
 module github.com/gyarbij/azure-oai-proxy
 
-go 1.22.4
+go 1.24.5
 
 require (
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.10.1
 	github.com/joho/godotenv v1.5.1
 	github.com/tidwall/gjson v1.18.0
 )
 
 require (
-	github.com/bytedance/sonic v1.11.6 // indirect
+	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect

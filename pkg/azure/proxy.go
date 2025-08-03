@@ -146,30 +146,36 @@ func HandleToken(req *http.Request) {
 }
 
 func makeDirector() func(*http.Request) {
-	return func(req *http.Request) {
-		model := getModelFromRequest(req)
-		originURL := req.URL.String()
-		log.Printf("Original request URL: %s for model: %s", originURL, model)
+    return func(req *http.Request) {
+        model := getModelFromRequest(req)
+        originURL := req.URL.String()
+        log.Printf("Original request URL: %s for model: %s", originURL, model)
 
-		// Handle the token
-		HandleToken(req)
+        // Check if this is a chat completion request for a model that should use Responses API
+        if strings.HasPrefix(req.URL.Path, "/v1/chat/completions") && shouldUseResponsesAPI(model) {
+            log.Printf("Redirecting %s from chat/completions to responses API", model)
+            // Convert the chat completion request to a responses request
+            convertChatToResponses(req)
+        }
 
-		// Convert model to lowercase for case-insensitive matching
-		modelLower := strings.ToLower(model)
+        // Handle the token
+        HandleToken(req)
 
-		// Check if it's a serverless deployment
-		if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
-			handleServerlessRequest(req, info, model)
-		} else if azureModel, ok := AzureOpenAIModelMapper[modelLower]; ok {
-			handleRegularRequest(req, azureModel)
-		} else {
-			log.Printf("Warning: Unknown model %s, treating as regular Azure OpenAI deployment", model)
-			handleRegularRequest(req, model)
-		}
+        // Convert model to lowercase for case-insensitive matching
+        modelLower := strings.ToLower(model)
 
-		log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
-		// log.Printf("Final request headers: %v", sanitizeHeaders(req.Header))
-	}
+        // Check if it's a serverless deployment
+        if info, ok := ServerlessDeploymentInfo[modelLower]; ok {
+            handleServerlessRequest(req, info, model)
+        } else if azureModel, ok := AzureOpenAIModelMapper[modelLower]; ok {
+            handleRegularRequest(req, azureModel)
+        } else {
+            log.Printf("Warning: Unknown model %s, treating as regular Azure OpenAI deployment", model)
+            handleRegularRequest(req, model)
+        }
+
+        log.Printf("Proxying request [%s] %s -> %s", model, originURL, req.URL.String())
+    }
 }
 
 func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model string) {
@@ -295,13 +301,20 @@ func sanitizeHeaders(headers http.Header) http.Header {
 }
 
 func modifyResponse(res *http.Response) error {
+    // Check if this is a Responses API response that needs conversion
+    if res.Request.URL.Path == "/openai/v1/responses" && res.StatusCode == 200 {
+        // Check if the original request was for chat completions
+        if origPath := res.Request.Header.Get("X-Original-Path"); origPath == "/v1/chat/completions" {
+            convertResponsesToChatCompletion(res)
+        }
+    }
+
     if res.StatusCode >= 400 {
         body, _ := io.ReadAll(res.Body)
         log.Printf("Azure API Error Response: Status: %d, Body: %s", res.StatusCode, string(body))
         res.Body = io.NopCloser(bytes.NewBuffer(body))
     }
     
-    // Handle streaming for both regular SSE and Responses API
     if res.Header.Get("Content-Type") == "text/event-stream" {
         res.Header.Set("X-Accel-Buffering", "no")
         res.Header.Set("Cache-Control", "no-cache")
@@ -309,4 +322,126 @@ func modifyResponse(res *http.Response) error {
     }
     
     return nil
+}
+
+// Add a function to check if a model should use Responses API
+func shouldUseResponsesAPI(model string) bool {
+    modelLower := strings.ToLower(model)
+    // Models that should use Responses API instead of chat completions
+    responsesModels := []string{
+        "o3", "o3-pro", "o3-mini", "o4", "o4-mini", "o1", "o1-preview", "o1-mini",
+    }
+    
+    for _, m := range responsesModels {
+        if strings.HasPrefix(modelLower, m) {
+            return true
+        }
+    }
+    return false
+}
+
+// Function to convert chat completion request to responses format
+func convertChatToResponses(req *http.Request) {
+    if req.Body != nil {
+        body, _ := io.ReadAll(req.Body)
+        
+        // Parse the chat completion request
+        messages := gjson.GetBytes(body, "messages").Array()
+        temperature := gjson.GetBytes(body, "temperature").Float()
+        maxTokens := gjson.GetBytes(body, "max_tokens").Int()
+        stream := gjson.GetBytes(body, "stream").Bool()
+        
+        // Convert messages to input format for Responses API
+        var input []map[string]interface{}
+        for _, msg := range messages {
+            role := msg.Get("role").String()
+            content := msg.Get("content").String()
+            
+            inputMsg := map[string]interface{}{
+                "role": role,
+                "content": []map[string]interface{}{
+                    {
+                        "type": "input_text",
+                        "text": content,
+                    },
+                },
+            }
+            input = append(input, inputMsg)
+        }
+        
+        // Create new request body for Responses API
+        newBody := map[string]interface{}{
+            "model": gjson.GetBytes(body, "model").String(),
+            "input": input,
+        }
+        
+        if temperature > 0 {
+            newBody["temperature"] = temperature
+        }
+        if maxTokens > 0 {
+            newBody["max_output_tokens"] = maxTokens
+        }
+        if stream {
+            newBody["stream"] = true
+        }
+        
+        // Marshal the new body
+        newBodyBytes, _ := json.Marshal(newBody)
+        req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
+        req.ContentLength = int64(len(newBodyBytes))
+        
+        // Update the path to use responses endpoint
+        req.URL.Path = "/v1/responses"
+    }
+}
+
+// Add function to convert Responses API response to chat completion format
+func convertResponsesToChatCompletion(res *http.Response) {
+    body, _ := io.ReadAll(res.Body)
+    
+    var responseData map[string]interface{}
+    json.Unmarshal(body, &responseData)
+    
+    // Extract the output
+    outputs := responseData["output"].([]interface{})
+    var content string
+    
+    for _, output := range outputs {
+        outputMap := output.(map[string]interface{})
+        if outputMap["type"] == "message" && outputMap["role"] == "assistant" {
+            contents := outputMap["content"].([]interface{})
+            for _, c := range contents {
+                contentMap := c.(map[string]interface{})
+                if contentMap["type"] == "output_text" {
+                    content = contentMap["text"].(string)
+                    break
+                }
+            }
+        }
+    }
+    
+    // Create chat completion response
+    chatResponse := map[string]interface{}{
+        "id": responseData["id"],
+        "object": "chat.completion",
+        "created": int64(responseData["created_at"].(float64)),
+        "model": responseData["model"],
+        "choices": []map[string]interface{}{
+            {
+                "index": 0,
+                "message": map[string]interface{}{
+                    "role": "assistant",
+                    "content": content,
+                },
+                "finish_reason": "stop",
+            },
+        },
+        "usage": responseData["usage"],
+    }
+    
+    // Marshal and set as new body
+    newBody, _ := json.Marshal(chatResponse)
+    res.Body = io.NopCloser(bytes.NewBuffer(newBody))
+    res.ContentLength = int64(len(newBody))
+    res.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBody)))
 }
