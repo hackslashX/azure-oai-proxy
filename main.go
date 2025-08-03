@@ -111,6 +111,13 @@ func main() {
 		router.GET("/deployments", handleAzureProxy)
 		router.GET("/deployments/:deployment_id", handleAzureProxy)
 		router.GET("/v1/models/:model_id/capabilities", handleAzureProxy)
+
+		// Responses API routes
+		router.POST("/v1/responses", handleAzureProxy)
+		router.GET("/v1/responses/:response_id", handleAzureProxy)
+		router.DELETE("/v1/responses/:response_id", handleAzureProxy)
+		router.POST("/v1/responses/:response_id/cancel", handleAzureProxy)
+		router.GET("/v1/responses/:response_id/input_items", handleAzureProxy)
 	} else {
 		router.Any("*path", handleOpenAIProxy)
 	}
