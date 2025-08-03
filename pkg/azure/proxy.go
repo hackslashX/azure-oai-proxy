@@ -18,6 +18,7 @@ import (
 var (
 	AzureOpenAIAPIVersion       = "2024-12-01-preview" // API version for proxying requests
 	AzureOpenAIModelsAPIVersion = "2024-10-21"         // API version for fetching models
+	AzureOpenAIResponsesAPIVersion = "preview"           // API version for Responses API
 	AzureOpenAIEndpoint         = ""
 	ServerlessDeploymentInfo    = make(map[string]ServerlessDeployment)
 	AzureOpenAIModelMapper      = make(map[string]string)
@@ -189,58 +190,96 @@ func handleServerlessRequest(req *http.Request, info ServerlessDeployment, model
 }
 
 func handleRegularRequest(req *http.Request, deployment string) {
-	remote, _ := url.Parse(AzureOpenAIEndpoint)
-	req.URL.Scheme = remote.Scheme
-	req.URL.Host = remote.Host
-	req.Host = remote.Host
+    remote, _ := url.Parse(AzureOpenAIEndpoint)
+    req.URL.Scheme = remote.Scheme
+    req.URL.Host = remote.Host
+    req.Host = remote.Host
 
-	// Construct the path for regular Azure OpenAI deployments
-	switch {
-	case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
-		req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
-	case strings.HasPrefix(req.URL.Path, "/v1/completions"):
-		req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
-	case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
-		req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
-		// Add other cases as needed
-	default:
-		req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
-	}
+    // Handle Responses API endpoints
+    if strings.Contains(req.URL.Path, "/v1/responses") {
+        // For Responses API, we need to handle the paths differently
+        if strings.HasPrefix(req.URL.Path, "/v1/responses") && !strings.Contains(req.URL.Path, "/responses/") {
+            // POST /v1/responses - Create response
+            req.URL.Path = "/openai/v1/responses"
+        } else {
+            // Other responses endpoints (GET, DELETE, etc.)
+            // Convert /v1/responses/{id} to /openai/v1/responses/{id}
+            req.URL.Path = strings.Replace(req.URL.Path, "/v1/", "/openai/v1/", 1)
+        }
+        
+        // Use the preview API version for Responses API
+        query := req.URL.Query()
+        query.Set("api-version", AzureOpenAIResponsesAPIVersion)
+        req.URL.RawQuery = query.Encode()
+    } else {
+        // Existing logic for other endpoints
+        switch {
+        case strings.HasPrefix(req.URL.Path, "/v1/chat/completions"):
+            req.URL.Path = path.Join("/openai/deployments", deployment, "chat/completions")
+        case strings.HasPrefix(req.URL.Path, "/v1/completions"):
+            req.URL.Path = path.Join("/openai/deployments", deployment, "completions")
+        case strings.HasPrefix(req.URL.Path, "/v1/embeddings"):
+            req.URL.Path = path.Join("/openai/deployments", deployment, "embeddings")
+        case strings.HasPrefix(req.URL.Path, "/v1/images/generations"):
+            req.URL.Path = path.Join("/openai/deployments", deployment, "images/generations")
+        case strings.HasPrefix(req.URL.Path, "/v1/audio/"):
+            // Handle audio endpoints
+            audioPath := strings.TrimPrefix(req.URL.Path, "/v1/")
+            req.URL.Path = path.Join("/openai/deployments", deployment, audioPath)
+        case strings.HasPrefix(req.URL.Path, "/v1/files"):
+            // Files API doesn't use deployment in path
+            req.URL.Path = strings.Replace(req.URL.Path, "/v1/", "/openai/", 1)
+        default:
+            req.URL.Path = path.Join("/openai/deployments", deployment, strings.TrimPrefix(req.URL.Path, "/v1/"))
+        }
+        
+        // Add api-version query parameter for non-Responses API
+        query := req.URL.Query()
+        query.Add("api-version", AzureOpenAIAPIVersion)
+        req.URL.RawQuery = query.Encode()
+    }
 
-	// Add api-version query parameter
-	query := req.URL.Query()
-	query.Add("api-version", AzureOpenAIAPIVersion)
-	req.URL.RawQuery = query.Encode()
-
-	// Use the api-key from the original request for regular deployments
-	apiKey := req.Header.Get("api-key")
-	if apiKey == "" {
-		log.Printf("Warning: No api-key found for regular deployment: %s", deployment)
-	}
-	log.Printf("Using regular Azure OpenAI deployment for %s", deployment)
+    // Use the api-key from the original request for regular deployments
+    apiKey := req.Header.Get("api-key")
+    if apiKey == "" {
+        log.Printf("Warning: No api-key found for regular deployment: %s", deployment)
+    }
+    log.Printf("Using regular Azure OpenAI deployment for %s", deployment)
 }
 
 func getModelFromRequest(req *http.Request) string {
-	// First, try to get the model from the URL path
-	parts := strings.Split(req.URL.Path, "/")
-	for i, part := range parts {
-		if part == "deployments" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
+    // For Responses API, always check the body first
+    if strings.Contains(req.URL.Path, "/responses") && req.Body != nil {
+        body, _ := io.ReadAll(req.Body)
+        req.Body = io.NopCloser(bytes.NewBuffer(body))
+        
+        // The Responses API uses "model" field in the request body
+        model := gjson.GetBytes(body, "model").String()
+        if model != "" {
+            return model
+        }
+    }
+    
+    // Existing logic for path-based model detection
+    parts := strings.Split(req.URL.Path, "/")
+    for i, part := range parts {
+        if part == "deployments" && i+1 < len(parts) {
+            return parts[i+1]
+        }
+    }
 
-	// If not found in the path, try to get it from the request body
-	if req.Body != nil {
-		body, _ := io.ReadAll(req.Body)
-		req.Body = io.NopCloser(bytes.NewBuffer(body))
-		model := gjson.GetBytes(body, "model").String()
-		if model != "" {
-			return model
-		}
-	}
+    // If not found in the path, try to get it from the request body
+    if req.Body != nil {
+        body, _ := io.ReadAll(req.Body)
+        req.Body = io.NopCloser(bytes.NewBuffer(body))
+        model := gjson.GetBytes(body, "model").String()
+        if model != "" {
+            return model
+        }
+    }
 
-	// If still not found, return an empty string
-	return ""
+    // If still not found, return an empty string
+    return ""
 }
 
 func sanitizeHeaders(headers http.Header) http.Header {
