@@ -359,7 +359,7 @@ func shouldUseResponsesAPI(model string) bool {
 	modelLower := strings.ToLower(model)
 	// Models that should use Responses API instead of chat completions
 	responsesModels := []string{
-		"o3-pro", "codex-mini",
+		"o3-pro", "codex-mini", "codex-mini-2025-05-16",
 	}
 
 	for _, m := range responsesModels {
