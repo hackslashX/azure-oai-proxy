@@ -217,10 +217,6 @@ func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
 
 
 func handleAzureProxy(c *gin.Context) {
-	if c.Request.Method == http.MethodOptions {
-		handleOptions(c)
-		return
-	}
 	server := azure.NewOpenAIReverseProxy()
 	server.ServeHTTP(c.Writer, c.Request)
 	if c.Writer.Header().Get("Content-Type") == "text/event-stream" {
