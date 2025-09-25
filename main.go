@@ -80,47 +80,58 @@ func init() {
 func main() {
 	router := gin.Default()
 
-	// Proxy routes
-	if ProxyMode == "azure" {
-		router.GET("/v1/models", handleGetModels)
-		router.OPTIONS("/v1/*path", handleOptions)
-		// Existing routes
-		router.POST("/v1/chat/completions", handleAzureProxy)
-		router.POST("/v1/completions", handleAzureProxy)
-		router.POST("/v1/embeddings", handleAzureProxy)
-		// DALL-E routes
-		router.POST("/v1/images/generations", handleAzureProxy)
-		// speech- routes
-		router.POST("/v1/audio/speech", handleAzureProxy)
-		router.GET("/v1/audio/voices", handleAzureProxy)
-		router.POST("/v1/audio/transcriptions", handleAzureProxy)
-		router.POST("/v1/audio/translations", handleAzureProxy)
-		// Fine-tuning routes
-		router.POST("/v1/fine_tunes", handleAzureProxy)
-		router.GET("/v1/fine_tunes", handleAzureProxy)
-		router.GET("/v1/fine_tunes/:fine_tune_id", handleAzureProxy)
-		router.POST("/v1/fine_tunes/:fine_tune_id/cancel", handleAzureProxy)
-		router.GET("/v1/fine_tunes/:fine_tune_id/events", handleAzureProxy)
-		// Files management routes
-		router.POST("/v1/files", handleAzureProxy)
-		router.GET("/v1/files", handleAzureProxy)
-		router.DELETE("/v1/files/:file_id", handleAzureProxy)
-		router.GET("/v1/files/:file_id", handleAzureProxy)
-		router.GET("/v1/files/:file_id/content", handleAzureProxy)
-		// Deployments management routes
-		router.GET("/deployments", handleAzureProxy)
-		router.GET("/deployments/:deployment_id", handleAzureProxy)
-		router.GET("/v1/models/:model_id/capabilities", handleAzureProxy)
+	// CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(200)
+			return
+		}
+		c.Next()
+	})
 
-		// Responses API routes
-		router.POST("/v1/responses", handleAzureProxy)
-		router.GET("/v1/responses/:response_id", handleAzureProxy)
-		router.DELETE("/v1/responses/:response_id", handleAzureProxy)
-		router.POST("/v1/responses/:response_id/cancel", handleAzureProxy)
-		router.GET("/v1/responses/:response_id/input_items", handleAzureProxy)
-	} else {
-		router.Any("*path", handleOpenAIProxy)
-	}
+	// Proxy routes
+		if ProxyMode == "azure" {
+			router.GET("/v1/models", handleGetModels)
+			// Existing routes
+			router.POST("/v1/chat/completions", handleAzureProxy)
+			router.POST("/v1/completions", handleAzureProxy)
+			router.POST("/v1/embeddings", handleAzureProxy)
+			// DALL-E routes
+			router.POST("/v1/images/generations", handleAzureProxy)
+			// speech- routes
+			router.POST("/v1/audio/speech", handleAzureProxy)
+			router.GET("/v1/audio/voices", handleAzureProxy)
+			router.POST("/v1/audio/transcriptions", handleAzureProxy)
+			router.POST("/v1/audio/translations", handleAzureProxy)
+			// Fine-tuning routes
+			router.POST("/v1/fine_tunes", handleAzureProxy)
+			router.GET("/v1/fine_tunes", handleAzureProxy)
+			router.GET("/v1/fine_tunes/:fine_tune_id", handleAzureProxy)
+			router.POST("/v1/fine_tunes/:fine_tune_id/cancel", handleAzureProxy)
+			router.GET("/v1/fine_tunes/:fine_tune_id/events", handleAzureProxy)
+			// Files management routes
+			router.POST("/v1/files", handleAzureProxy)
+			router.GET("/v1/files", handleAzureProxy)
+			router.DELETE("/v1/files/:file_id", handleAzureProxy)
+			router.GET("/v1/files/:file_id", handleAzureProxy)
+			router.GET("/v1/files/:file_id/content", handleAzureProxy)
+			// Deployments management routes
+			router.GET("/deployments", handleAzureProxy)
+			router.GET("/deployments/:deployment_id", handleAzureProxy)
+			router.GET("/v1/models/:model_id/capabilities", handleAzureProxy)
+
+			// Responses API routes
+			router.POST("/v1/responses", handleAzureProxy)
+			router.GET("/v1/responses/:response_id", handleAzureProxy)
+			router.DELETE("/v1/responses/:response_id", handleAzureProxy)
+			router.POST("/v1/responses/:response_id/cancel", handleAzureProxy)
+			router.GET("/v1/responses/:response_id/input_items", handleAzureProxy)
+		} else {
+			router.Any("*path", handleOpenAIProxy)
+		}
 
 	// Health check endpoint
 	router.GET("/healthz", func(c *gin.Context) {
@@ -204,13 +215,6 @@ func fetchDeployedModels(originalReq *http.Request) ([]Model, error) {
 	return deployedModelsResponse.Data, nil
 }
 
-func handleOptions(c *gin.Context) {
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	c.Status(200)
-	return
-}
 
 func handleAzureProxy(c *gin.Context) {
 	if c.Request.Method == http.MethodOptions {
