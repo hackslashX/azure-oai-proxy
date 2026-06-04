@@ -168,11 +168,9 @@ func init() {
 		"gpt-3.5-turbo-instruct":      "gpt-35-turbo-instruct-0914",
 		"gpt-3.5-turbo-instruct-0914": "gpt-35-turbo-instruct-0914",
 		// Embedding models
-		"text-embedding-3-small":   "text-embedding-3-small-1",
-		"text-embedding-3-large":   "text-embedding-3-large-1",
-		"text-embedding-ada-002":   "text-embedding-ada-002-2",
-		"text-embedding-ada-002-1": "text-embedding-ada-002-1",
-		"text-embedding-ada-002-2": "text-embedding-ada-002-2",
+		"text-embedding-3-small":   "text-embedding-3-small",
+		"text-embedding-3-large":   "text-embedding-3-large",
+		"text-embedding-ada-002":   "text-embedding-ada-002",
 		// DALL-E models
 		"dall-e-2":     "dall-e-2-2.0",
 		"dall-e-2-2.0": "dall-e-2-2.0",
